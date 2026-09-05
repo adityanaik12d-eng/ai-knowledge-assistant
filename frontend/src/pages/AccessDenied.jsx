@@ -39,10 +39,10 @@ export default function AccessDenied() {
           🔒
         </div>
         <h2 style={{ margin: '0 0 8px', fontSize: 18, color: '#0F2A2E' }}>
-          This tool is for IT/CSE department only
+          This area is for admins only
         </h2>
         <p style={{ margin: '0 0 20px', fontSize: 13.5, color: '#6B7280' }}>
-          Your account ({user?.email}) doesn't have access. If you believe this is a mistake, contact your IT/CSE admin.
+          Your account ({user?.email}) doesn't have admin access. If you believe this is a mistake, contact your admin.
         </p>
         <button
           onClick={handleLogout}

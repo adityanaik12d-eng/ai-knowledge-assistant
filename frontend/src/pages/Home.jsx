@@ -7,7 +7,7 @@ import { BRAND } from '../config/brand.js';
 
 export default function Home() {
   const { user, signOut, isAdmin } = useAuth();
-  const { theme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const A = theme === 'dark' ? DARK_COLORS : LIGHT_COLORS;
   return (
     <div style={{
@@ -24,6 +24,21 @@ export default function Home() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <span style={{ fontSize: 13, color: A.muted }}>{user?.email}</span>
+          <button
+            onClick={toggleTheme}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: A.primary,
+              fontSize: 20,
+              cursor: 'pointer',
+              padding: 0,
+              lineHeight: 1,
+            }}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           <button
             onClick={() => signOut()}
             style={{
@@ -47,12 +62,9 @@ export default function Home() {
         }}>
           ✓
         </div>
-        <h2 style={{ margin: '0 0 8px', fontSize: 18, color: A.heading }}>
+        <h2 style={{ margin: '0 0 24px', fontSize: 18, color: A.heading }}>
           Welcome to {BRAND.name}
         </h2>
-        <p style={{ margin: '0 0 24px', fontSize: 13.5, color: A.muted, maxWidth: 380, lineHeight: 1.5 }}>
-          {BRAND.tagline}
-        </p>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <Link
             to="/chat"

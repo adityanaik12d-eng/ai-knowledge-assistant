@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export function ProtectedRoute({ children }) {
-  const { user, loading, isITCSE } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -18,10 +18,6 @@ export function ProtectedRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
-  }
-
-  if (!isITCSE) {
-    return <Navigate to="/access-denied" replace />;
   }
 
   return children;

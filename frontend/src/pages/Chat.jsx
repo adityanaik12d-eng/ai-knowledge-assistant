@@ -53,14 +53,6 @@ const DARK_COLORS = {
 const MAX_HISTORY_TURNS = 40;
 const MAX_FILE_SIZE_MB = 8;
 
-const SUGGESTIONS = [
-  'How do I reset my password?',
-  'Explain how AI chatbots work',
-  'Write a Python function to reverse a string',
-  'What are the key IT troubleshooting steps?',
-  'Summarize our team onboarding docs',
-];
-
 const getSourceText = (s) => {
   const raw = s?.text || s?.chunk || s?.content || s?.excerpt || s?.snippet || '';
   return raw
@@ -1493,26 +1485,8 @@ export default function Chat() {
           }}>
           {messages.length === 0 && activeConversationId === null && (
             <div style={{ textAlign: 'center', color: A.muted, fontSize: viewportWidth < 640 ? 11.5 : 13.5, marginTop: 60 }}>
-              <div style={{ fontWeight: 700, fontSize: viewportWidth < 640 ? 16 : 22, color: A.text, marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: viewportWidth < 640 ? 16 : 22, color: A.text }}>
                 How can I help you today?
-              </div>
-              <div>Ask me anything — code, IT questions, troubleshooting, or your team's uploaded docs.</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 24 }}>
-                {SUGGESTIONS.map((s, si) => (
-                  <button
-                    key={si}
-                    onClick={() => submitQuestion(s)}
-                    style={{
-                      padding: '8px 14px', borderRadius: 20,
-                      border: `1px solid ${A.border}`,
-                      background: A.surface, color: A.text,
-                      fontSize: viewportWidth < 640 ? 11 : 13,
-                      cursor: 'pointer', transition: 'all 0.2s',
-                    }}
-                  >
-                    {s}
-                  </button>
-                ))}
               </div>
             </div>
           )}

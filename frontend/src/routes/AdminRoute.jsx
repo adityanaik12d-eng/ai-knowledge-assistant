@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export function AdminRoute({ children }) {
-  const { user, isAdmin, isITCSE, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
 
   if (loading) {
     return (
@@ -17,8 +17,7 @@ export function AdminRoute({ children }) {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  if (!isITCSE) return <Navigate to="/access-denied" replace />;
-  if (!isAdmin) return <Navigate to="/" replace />;
+  if (!isAdmin) return <Navigate to="/access-denied" replace />;
 
   return children;
 }
