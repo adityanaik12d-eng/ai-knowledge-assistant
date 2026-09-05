@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/chat/google16b5e8ad22e52245.html", "destination": "/google16b5e8ad22e52245.html" },
+    { "source": "/((?!assets|.*\\..*).*)", "destination": "/index.html" }
+  ]
+}
