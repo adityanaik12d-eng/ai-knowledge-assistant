@@ -414,23 +414,100 @@ export default function Chat() {
     } catch (e) { /* ignore storage errors */ }
   };
 
-  const handleFileUpload = async (file) => {
+  const uploadOne = async (file) => {
     // Validate file
     if (!file) {
-      setUploadError('No file selected');
-      return;
+      throw new Error('No file selected');
     }
 
     if (file.size === 0) {
-      setUploadError('File is empty');
-      return;
+      throw new Error('File is empty');
     }
 
     const fileSizeMB = file.size / (1024 * 1024);
     if (fileSizeMB > MAX_FILE_SIZE_MB) {
-      setUploadError(`File too large (max ${MAX_FILE_SIZE_MB}MB)`);
-      return;
+      throw new Error(`File too large (max ${MAX_FILE_SIZE_MB}MB)`);
     }
+
+    // FIXED: Get access token from session (same as handleSend)
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('No session');
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('No user');
+
+    const body = { title: file.name };
+
+    // Front-end now accepts all file types, whether a given file type can actually be processed depends on the backend ingestion pipeline, which is unchanged by this fix.
+    // Determine file type and process accordingly
+    const allowedTextExtensions = ['.txt', '.md', '.markdown', '.json', '.js', '.jsx', '.ts', '.tsx', '.css', '.html', '.py', '.java', '.c', '.cpp', '.cs', '.go', '.rb', '.php', '.sql', '.yaml', '.yml', '.sh', '.xml', '.csv'];
+    const isTextFile = allowedTextExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+    const isPdfFile = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    if (isTextFile) {
+      // Read as text
+      const content = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.trim());
+        reader.onerror = reject;
+        reader.readAsText(file);
+      });
+      body.content = content;
+    } else if (isPdfFile) {
+      // Read as base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result;
+          // Remove the data:url prefix to get raw base64
+          const base64Data = dataUrl.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      body.pdfBase64 = base64;
+    } else {
+      // For other file types, we'll still try to upload and let the backend handle it
+      // Read as base64 for binary files
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result;
+          // Remove the data:url prefix to get raw base64
+          const base64Data = dataUrl.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      body.dataBase64 = base64;
+      body.dataType = file.type;
+    }
+
+    // Upload to knowledge base
+    const res = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ingest`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Upload failed');
+    }
+
+    return { name: file.name, chunksStored: data.chunksStored ?? 0 };
+  };
+
+  const handleFileUpload = async (files) => {
+    const list = Array.from(files || []);
+    if (list.length === 0) return;
 
     // Reset previous upload states
     setUploading(true);
@@ -439,134 +516,81 @@ export default function Chat() {
 
     // Add uploading message to chat
     const uploadMessageId = `upload-${Date.now()}`;
+    const label = list.length === 1 ? list[0].name : `${list.length} files`;
     setMessages(prev => [
       ...prev,
       {
         id: uploadMessageId,
         role: 'system',
-        text: `📄 Uploading ${file.name}...`,
+        text: `📄 Uploading ${label}...`,
         type: 'uploading',
-        fileName: file.name
+        fileName: list.length === 1 ? list[0].name : undefined
       }
     ]);
 
+    const ok = [];
+    const failed = [];
+
     try {
-      // FIXED: Get access token from session (same as handleSend)
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No session');
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No user');
-
-      const body = { title: file.name };
-
-      // Front-end now accepts all file types, whether a given file type can actually be processed depends on the backend ingestion pipeline, which is unchanged by this fix.
-      // Determine file type and process accordingly
-      const allowedTextExtensions = ['.txt', '.md', '.markdown', '.json', '.js', '.jsx', '.ts', '.tsx', '.css', '.html', '.py', '.java', '.c', '.cpp', '.cs', '.go', '.rb', '.php', '.sql', '.yaml', '.yml', '.sh', '.xml', '.csv'];
-      const isTextFile = allowedTextExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
-      const isPdfFile = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-
-      if (isTextFile) {
-        // Read as text
-        const content = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result.trim());
-          reader.onerror = reject;
-          reader.readAsText(file);
-        });
-        body.content = content;
-      } else if (isPdfFile) {
-        // Read as base64
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const dataUrl = reader.result;
-            // Remove the data:url prefix to get raw base64
-            const base64Data = dataUrl.split(',')[1];
-            resolve(base64Data);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        body.pdfBase64 = base64;
-      } else {
-        // For other file types, we'll still try to upload and let the backend handle it
-        // Read as base64 for binary files
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const dataUrl = reader.result;
-            // Remove the data:url prefix to get raw base64
-            const base64Data = dataUrl.split(',')[1];
-            resolve(base64Data);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        body.dataBase64 = base64;
-        body.dataType = file.type;
+      for (let i = 0; i < list.length; i++) {
+        const file = list[i];
+        setMessages(prev => prev.map(m => (
+          m.id === uploadMessageId
+            ? { ...m, text: `📄 Uploading ${file.name} (${i + 1}/${list.length})...` }
+            : m
+        )));
+        try {
+          const result = await uploadOne(file);
+          ok.push(result);
+        } catch (err) {
+          console.error('Upload error:', err);
+          failed.push({ name: file.name, error: err.message });
+        }
       }
-
-      // Upload to knowledge base
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ingest`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify(body),
-        }
-      );
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Upload failed');
-      }
-
-      // Update upload success message
-      setMessages(prev => [
-        ...prev.filter(msg => msg.id !== uploadMessageId),
-        {
-          id: uploadMessageId,
-          role: 'system',
-          text: `✅ Added ${file.name} to the knowledge base (${data.chunksStored} chunks).`,
-          type: 'success',
-          fileName: file.name,
-          chunksStored: data.chunksStored
-        }
-      ]);
-
-      // FIX 1: Also add an assistant message for conversation history
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          text: `I've added "${file.name}" to the knowledge base (${data.chunksStored} chunk(s)). You can ask me anything about its contents and I'll search it.`
-        }
-      ]);
-
-      setUploadSuccess(data);
-    } catch (err) {
-      console.error('Upload error:', err);
-      // Update upload error message
-      setMessages(prev => [
-        ...prev.filter(msg => msg.id !== uploadMessageId),
-        {
-          id: uploadMessageId,
-          role: 'system',
-          text: `⚠️ Couldn't add ${file.name}: ${err.message}`,
-          type: 'error',
-          fileName: file.name
-        }
-      ]);
-      setUploadError(err.message);
     } finally {
       setUploading(false);
       // Clear file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+
+    // Summarize results
+    const summary = [];
+    if (ok.length === 1) {
+      summary.push(`✅ Added ${ok[0].name} to the knowledge base (${ok[0].chunksStored} chunks).`);
+    } else if (ok.length > 1) {
+      summary.push(`✅ Added ${ok.length} files to the knowledge base.`);
+    }
+    if (failed.length) {
+      summary.push(`⚠️ Couldn't add ${failed.length} file(s): ${failed.map(f => `${f.name} (${f.error})`).join(', ')}`);
+    }
+
+    setMessages(prev => [
+      ...prev.filter(msg => msg.id !== uploadMessageId),
+      {
+        id: uploadMessageId,
+        role: 'system',
+        text: summary.join('\n') || 'Upload finished.',
+        type: ok.length > 0 ? 'success' : 'error',
+        fileName: list.length === 1 ? list[0].name : undefined
+      }
+    ]);
+
+    if (ok.length) {
+      // Also add an assistant message for conversation history
+      const names = ok.length === 1 ? `"${ok[0].name}"` : `${ok.length} files`;
+      const pronoun = ok.length === 1 ? 'its' : 'their';
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: `I've added ${names} to the knowledge base (${ok.reduce((acc, r) => acc + r.chunksStored, 0)} chunk(s) total). You can ask me anything about ${pronoun} contents and I'll search it.`
+        }
+      ]);
+      setUploadSuccess({ chunksStored: ok.reduce((acc, r) => acc + r.chunksStored, 0) });
+    } else {
+      setUploadError(failed.map(f => `${f.name}: ${f.error}`).join(', '));
     }
   };
 
@@ -1699,10 +1723,11 @@ export default function Chat() {
                   type="file"
                   ref={fileInputRef}
                   style={{ display: 'none' }}
+                  multiple
                   onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleFileUpload(file);
+                    const files = e.target.files;
+                    if (files && files.length > 0) {
+                      handleFileUpload(files);
                     }
                   }}
                   accept="*" /* Front-end now accepts all file types, whether a given file type can actually be processed depends on the backend ingestion pipeline, which is unchanged by this fix. */

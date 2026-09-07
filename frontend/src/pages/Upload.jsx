@@ -22,7 +22,7 @@ export default function Upload() {
   const [mode, setMode] = useState('text');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfFiles, setPdfFiles] = useState([]);
   const [status, setStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { theme } = useTheme();
@@ -65,10 +65,11 @@ export default function Upload() {
       if (!trimmedContent) return 'Document text is required.';
       if (trimmedContent.length > MAX_CONTENT_LEN) return `Document text is too long (max ${MAX_CONTENT_LEN.toLocaleString()} characters).`;
     } else {
-      if (!pdfFile) return 'Please select a PDF file.';
-      if (pdfFile.type !== 'application/pdf') return 'Only PDF files are allowed.';
-      const sizeMB = pdfFile.size / (1024 * 1024);
-      if (sizeMB > MAX_PDF_MB) return `PDF is too large (max ${MAX_PDF_MB}MB). Large books/manuals aren't supported yet.`;
+      if (pdfFiles.length === 0) return 'Please select at least one PDF file.';
+      const badType = pdfFiles.find(f => f.type !== 'application/pdf');
+      if (badType) return `Only PDF files are allowed: ${badType.name}`;
+      const tooBig = pdfFiles.find(f => f.size / (1024 * 1024) > MAX_PDF_MB);
+      if (tooBig) return `PDF is too large (max ${MAX_PDF_MB}MB): ${tooBig.name}`;
     }
     return '';
   };
@@ -85,29 +86,50 @@ export default function Upload() {
     setSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
 
-      const body = { title: title.trim() };
+      let totalChunks = 0;
       if (mode === 'pdf') {
-        body.pdfBase64 = await fileToBase64(pdfFile);
-      } else {
-        body.content = content.trim();
-      }
-
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ingest`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify(body),
+        for (let i = 0; i < pdfFiles.length; i++) {
+          const file = pdfFiles[i];
+          setStatus(`Uploading… (${i + 1}/${pdfFiles.length})`);
+          const body = { title: file.name, pdfBase64: await fileToBase64(file) };
+          const res = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ingest`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify(body),
+            }
+          );
+          const data = await res.json();
+          if (!res.ok) { throw new Error(data.error || 'Upload failed. Please try again.'); }
+          totalChunks += data.chunksStored;
         }
-      );
-      const data = await res.json();
-      if (!res.ok) { setStatus(`Error: ${data.error || 'Upload failed. Please try again.'}`); return; }
-      setStatus(`Done! Stored ${data.chunksStored} chunks.`);
-      setTitle(''); setContent(''); setPdfFile(null);
+        setStatus(`Done! Stored ${totalChunks} chunks from ${pdfFiles.length} PDF(s).`);
+      } else {
+        const body = { title: title.trim(), content: content.trim() };
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ingest`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify(body),
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) { setStatus(`Error: ${data.error || 'Upload failed. Please try again.'}`); return; }
+        setStatus(`Done! Stored ${data.chunksStored} chunks.`);
+      }
+      setTitle('');
+      setContent('');
+      setPdfFiles([]);
     } catch (err) {
       setStatus('Error: Something went wrong. Please try again.');
     } finally {
@@ -196,18 +218,23 @@ export default function Upload() {
           ) : (
             <>
               <label style={{ display: 'block', fontSize: 12, color: A.muted, margin: '14px 0 4px' }}>
-                PDF file (max {MAX_PDF_MB}MB)
+                PDF file(s) (max {MAX_PDF_MB}MB each, select multiple)
               </label>
               <input
                 type="file"
-                accept="application/pdf"
-                onChange={e => setPdfFile(e.target.files?.[0] ?? null)}
+                accept="application/pdf,.pdf"
+                multiple
+                onChange={e => setPdfFiles(Array.from(e.target.files || []))}
                 style={{ ...inputStyle, padding: '8px 12px' }}
               />
-              {pdfFile && (
-                <p style={{ marginTop: 6, fontSize: 12, color: A.muted }}>
-                  Selected: {pdfFile.name} ({(pdfFile.size / (1024 * 1024)).toFixed(2)} MB)
-                </p>
+              {pdfFiles.length > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  {pdfFiles.map(f => (
+                    <p key={f.name + f.size} style={{ margin: '2px 0', fontSize: 12, color: A.muted }}>
+                      {f.name} ({(f.size / (1024 * 1024)).toFixed(2)} MB)
+                    </p>
+                  ))}
+                </div>
               )}
             </>
           )}
