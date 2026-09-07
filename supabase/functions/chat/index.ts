@@ -42,6 +42,32 @@ function buildSystemPrompt(): string {
 
 const encoder = new TextEncoder();
 
+// Provider-side rate limiting: once Gemini reports 429, remember it for the
+// next 2 hours (Deno.Kv, with in-memory fallback) so subsequent requests fail
+// fast with the friendly limit message instead of re-calling a hanging Gemini.
+const KV_KEY = ["gemini_limit_until"];
+let kv: Deno.Kv | null = null;
+let memLimitUntil = 0;
+
+async function getLimitUntil(): Promise<number> {
+  try {
+    if (!kv) kv = await Deno.openKv();
+    const res = await kv.get<number>(KV_KEY);
+    return res?.value ?? 0;
+  } catch {
+    return memLimitUntil;
+  }
+}
+
+async function persistLimitUntil(ms: number): Promise<void> {
+  try {
+    if (!kv) kv = await Deno.openKv();
+    await kv.set(KV_KEY, ms, { expireIn: Math.max(ms - Date.now(), 60000) });
+  } catch {
+    memLimitUntil = ms;
+  }
+}
+
 async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -60,6 +86,21 @@ async function handler(req: Request): Promise<Response> {
     authedUserId = data.user.id;
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : "Unauthorized" }, 401);
+  }
+
+  // Fast path: if the Gemini provider is currently rate-limited (429 seen
+  // recently), answer immediately without touching Gemini.
+  const limitUntil = await getLimitUntil();
+  if (Date.now() < limitUntil) {
+    return json(
+      {
+        code: "quota_exceeded",
+        error:
+          "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
+        resetAt: limitUntil,
+      },
+      429
+    );
   }
 
   // Plan-based message quota: free users get FREE_LIMIT questions per 2-hour window
@@ -121,15 +162,25 @@ async function handler(req: Request): Promise<Response> {
     qVec = await embedText(question);
   } catch (e) {
     const msg = (e as Error).message ?? "";
-    if (/429|rate|limit/i.test(msg) || (e as Error & { name?: string }).name === "TimeoutError") {
+    if (/Embedding failed \(429\)/.test(msg)) {
+      const untilMs = Date.now() + 2 * 60 * 60 * 1000;
+      await persistLimitUntil(untilMs);
       return json(
         {
           code: "quota_exceeded",
           error:
             "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
-          resetAt: Date.now() + 2 * 60 * 60 * 1000,
+          resetAt: untilMs,
         },
         429
+      );
+    }
+    if ((e as Error & { name?: string }).name === "TimeoutError") {
+      return json(
+        {
+          error: "I'm having trouble connecting to the model right now. Please try again in a moment.",
+        },
+        500
       );
     }
     return json(
@@ -218,14 +269,16 @@ async function handler(req: Request): Promise<Response> {
         }
         clearTimeout(gWait);
 
-        if (!gRes.ok || !gRes.body) {
+if (!gRes.ok || !gRes.body) {
           if (gRes.status === 429) {
+            const untilMs = Date.now() + 2 * 60 * 60 * 1000;
+            await persistLimitUntil(untilMs);
             send({
-                type: "error",
-                error:
-                  "You've reached your answer limit for now. Please try again in about 2 hours, or upgrade to Premium for unlimited access.",
-                resetAt: Date.now() + 2 * 60 * 60 * 1000,
-              });
+              type: "error",
+              error:
+                "You've reached your answer limit for now. Please try again in about 2 hours, or upgrade to Premium for unlimited access.",
+              resetAt: untilMs,
+            });
             controller.close();
             return;
           }
@@ -257,6 +310,19 @@ async function handler(req: Request): Promise<Response> {
               evt = JSON.parse(payload);
             } catch {
               continue;
+            }
+            // Gemini can also 429 mid-stream (SSE error payload).
+            if (evt?.error && (/429/.test(String(evt.error.code ?? "")) || /QUOTA|rate|limit/i.test(String(evt.error.message ?? "")))) {
+              const untilMs = Date.now() + 2 * 60 * 60 * 1000;
+              await persistLimitUntil(untilMs);
+              send({
+                type: "error",
+                error:
+                  "You've reached your answer limit for now. Please try again in about 2 hours, or upgrade to Premium for unlimited access.",
+                resetAt: untilMs,
+              });
+              controller.close();
+              return;
             }
             const parts: any[] = evt.candidates?.[0]?.content?.parts ?? [];
             for (const part of parts) {
