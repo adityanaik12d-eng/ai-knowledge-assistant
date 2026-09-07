@@ -309,8 +309,12 @@ export default function Chat() {
     try {
       const { data, error } = await supabase.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: true });
       if (error) throw error;
-      // Transform database rows to match component's expected shape
-      const transformedMessages = data.map(msg => ({
+      // Transform database rows to match component's expected shape.
+      // Skip empty assistant messages (saved during rate-limit/abort edge cases)
+      // so they never reappear as a stuck "Thinking…" bubble after a refresh.
+      const transformedMessages = data
+        .filter(m => m.role !== 'assistant' || (m.content && m.content.trim()))
+        .map(msg => ({
         role: msg.role,
         text: msg.content,
         sources: msg.sources || []
@@ -783,6 +787,13 @@ export default function Chat() {
           )
         ]);
 
+        // Empty streamed response (e.g. provider returned nothing): drop the
+        // "Thinking…" placeholder instead of persisting an empty assistant row.
+        if (!accumulatedText.trim()) {
+          setMessages(prev => prev.slice(0, assistantIndex));
+          return;
+        }
+
         // Save assistant message to DB after streaming completes
         try {
           const { data: { user } } = await supabase.auth.getUser();
@@ -816,27 +827,32 @@ export default function Chat() {
           }
         } else if (err.name === 'AbortError') {
           // If the error is due to abort, treat as user-initiated stop (no error message)
-          // Save partial message as final
-          try {
-            const { data: { user } } = await supabase.auth.getUser();
-            await supabase.from('messages').insert([
-              {
-                conversation_id: conversationId,
-                user_id: user.id,
-                role: 'assistant',
-                content: accumulatedText,
-                sources: sources,
-              }
-            ]);
-            // Update conversation's updated_at
-            await supabase
-              .from('conversations')
-              .update({ updated_at: new Date() })
-              .eq('id', conversationId);
-            // Refresh conversations list to update ordering
-            loadConversations();
-          } catch (saveErr) {
-            console.error('Error saving assistant message after abort:', saveErr);
+          if (accumulatedText.trim()) {
+            // Save partial message as final
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              await supabase.from('messages').insert([
+                {
+                  conversation_id: conversationId,
+                  user_id: user.id,
+                  role: 'assistant',
+                  content: accumulatedText,
+                  sources: sources,
+                }
+              ]);
+              // Update conversation's updated_at
+              await supabase
+                .from('conversations')
+                .update({ updated_at: new Date() })
+                .eq('id', conversationId);
+              // Refresh conversations list to update ordering
+              loadConversations();
+            } catch (saveErr) {
+              console.error('Error saving assistant message after abort:', saveErr);
+            }
+          } else {
+            // Stopped before any text: remove the "Thinking…" placeholder
+            setMessages(prev => prev.slice(0, assistantIndex));
           }
         } else {
           // Other error (network, etc.)
