@@ -738,6 +738,7 @@ export default function Chat() {
       let buffer = '';
       let accumulatedText = '';
       let sources = [];
+      let streamHadError = false;
 
       try {
         await Promise.race([
@@ -769,6 +770,7 @@ export default function Chat() {
                     return next;
                   });
                 } else if (evt.type === 'error') {
+                  streamHadError = true;
                   setMessages((prev) => {
                     const next = [...prev];
                     let text = evt.error;
@@ -789,7 +791,8 @@ export default function Chat() {
 
         // Empty streamed response (e.g. provider returned nothing): drop the
         // "Thinking…" placeholder instead of persisting an empty assistant row.
-        if (!accumulatedText.trim()) {
+        // Keep any error bubble that was already shown during the stream.
+        if (!accumulatedText.trim() && !streamHadError) {
           setMessages(prev => prev.slice(0, assistantIndex));
           return;
         }
