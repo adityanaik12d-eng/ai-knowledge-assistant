@@ -271,6 +271,7 @@ export default function Dashboard() {
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: 13, color: A.text }}>Email *</label>
                 <input
                   type="email"
+                  autoComplete="off"
                   value={addUserForm.email}
                   onChange={(e) => setAddUserForm(prev => ({ ...prev, email: e.target.value }))}
                   placeholder="user@example.com"
@@ -290,6 +291,7 @@ export default function Dashboard() {
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: 13, color: A.text }}>Password *</label>
                 <input
                   type="password"
+                  autoComplete="new-password"
                   value={addUserForm.password}
                   onChange={(e) => setAddUserForm(prev => ({ ...prev, password: e.target.value }))}
                   placeholder="••••••••"
