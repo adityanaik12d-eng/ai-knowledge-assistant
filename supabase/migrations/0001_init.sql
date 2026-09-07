@@ -31,13 +31,13 @@ create table if not exists public.projects (
 
 -- ------------------------------------------------------------
 -- documents (knowledge base chunks with embeddings)
--- embedding dims = 768 (Google text-embedding-004)
+-- embedding dims = 3072 (Google gemini-embedding-001)
 -- ------------------------------------------------------------
 create table if not exists public.documents (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   content text not null,
-  embedding vector(768),
+  embedding vector(3072),
   uploaded_by uuid references auth.users (id) on delete set null,
   created_at timestamptz not null default now()
 );
@@ -47,7 +47,7 @@ create index if not exists documents_embedding_idx
 
 -- vector search helper (called by the /chat edge function)
 create or replace function public.match_documents(
-  query_embedding vector(768),
+  query_embedding vector(3072),
   match_count int default 5
 )
 returns table (id uuid, title text, content text, similarity double precision)

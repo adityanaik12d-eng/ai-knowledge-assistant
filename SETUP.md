@@ -32,7 +32,7 @@ aur redirect URL mein `https://<your-alias>.vercel.app/reset-password` add karo.
 ## 4) Gemini (free) API key
 
 1. [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → **Create API key** (free).
-2. Default models (free tier): chat = `gemini-2.0-flash`, embeddings = `text-embedding-004`.
+2. Model (free tier): chat = `gemini-3.6-flash`, embeddings = `gemini-embedding-001` (3072 dims).
 3. Isley ko Edge Function secrets mein rakho (step 6).
 
 ## 5) Edge Functions deploy karo

@@ -1,7 +1,7 @@
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
-export const EMBED_MODEL = Deno.env.get("EMBEDDING_MODEL") ?? "text-embedding-004";
-export const CHAT_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.0-flash";
+export const EMBED_MODEL = Deno.env.get("EMBEDDING_MODEL") ?? "gemini-embedding-001";
+export const CHAT_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.6-flash";
 
 function geminiBase() {
   return `https://generativelanguage.googleapis.com/v1beta/models`;
