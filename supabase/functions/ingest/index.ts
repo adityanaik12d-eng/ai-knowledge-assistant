@@ -76,7 +76,7 @@ async function extractPdfText(pdfBase64: string): Promise<string> {
   return pages.join("\n");
 }
 
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -153,3 +153,5 @@ export default async function handler(req: Request): Promise<Response> {
 
   return json({ chunksStored: rows.length, title });
 }
+
+Deno.serve(handler);

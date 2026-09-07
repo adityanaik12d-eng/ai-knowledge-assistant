@@ -42,7 +42,7 @@ function buildSystemPrompt(): string {
 
 const encoder = new TextEncoder();
 
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -51,13 +51,52 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   // Authenticate the caller (frontend sends the user's Supabase access token).
+  let authedUserId = "";
   try {
     const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
     if (!token) throw new Error("Missing authorization header");
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data.user) throw new Error("Unauthorized");
+    authedUserId = data.user.id;
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : "Unauthorized" }, 401);
+  }
+
+  // Plan-based message quota: free users get FREE_LIMIT questions per 2-hour window
+  // (premium and admin users are unlimited).
+  {
+    const FREE_LIMIT = Number(Deno.env.get("FREE_MSG_LIMIT")) || 20;
+    const WINDOW_MS = 2 * 60 * 60 * 1000;
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", authedUserId)
+        .maybeSingle();
+      const role = profile?.role ?? "free";
+      if (role === "free") {
+        const since = new Date(Date.now() - WINDOW_MS).toISOString();
+        const { count } = await supabase
+          .from("messages")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", authedUserId)
+          .eq("role", "user")
+          .gte("created_at", since);
+        if ((count ?? 0) > FREE_LIMIT) {
+          return json(
+            {
+              code: "quota_exceeded",
+              error:
+                `You've reached the free plan limit (${FREE_LIMIT} questions per 2 hours). ` +
+                "Please try again later, or upgrade to Premium for unlimited access.",
+            },
+            429
+          );
+        }
+      }
+    } catch {
+      // quota lookup failed — allow the request through rather than blocking chat
+    }
   }
 
   let body: any;
@@ -205,3 +244,5 @@ export default async function handler(req: Request): Promise<Response> {
     })
   );
 }
+
+Deno.serve(handler);
