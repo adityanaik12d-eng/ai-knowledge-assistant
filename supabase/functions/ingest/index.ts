@@ -47,6 +47,158 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
+const KB_BUCKET = "kb-files";
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"]);
+const OFFICE_EXTS = new Set([".docx", ".pptx", ".xlsx"]);
+
+function extOf(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i >= 0 ? name.slice(i).toLowerCase() : "";
+}
+
+function officeMimeOf(ext: string): string {
+  switch (ext) {
+    case ".docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case ".pptx":
+      return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    case ".xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function randomUuid(): string {
+  return crypto.randomUUID();
+}
+
+async function describeImage(imageBase64: string, mime: string): Promise<string> {
+  const model = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.6-flash";
+  const key = Deno.env.get("GEMINI_API_KEY") ?? "";
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              text:
+                "Describe this image in detail for a searchable knowledge base. " +
+                "Include all readable text, subjects, context, and purpose.",
+            },
+            { inline_data: { mime_type: mime, data: imageBase64 } },
+          ],
+        }],
+      }),
+    }
+  );
+  if (!res.ok) {
+    const msg = await res.text().catch(() => "");
+    throw new Error(`Vision failed (${res.status}): ${msg.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const parts = data?.candidates?.[0]?.content?.parts;
+  const text = Array.isArray(parts)
+    ? parts.map((p: any) => (typeof p?.text === "string" ? p.text : "")).join(" ")
+    : "";
+  return text.trim() || "(An image that could not be described automatically.)";
+}
+
+async function extractOfficeText(b64: string, kind: string): Promise<string> {
+  const JSZip: any = await import("https://esm.sh/jszip@3.10.1");
+  const zip = await JSZip.loadAsync(base64ToBytes(b64));
+  const strip = (xml: string) =>
+    xml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+
+  if (kind === "docx") {
+    const file = zip.file("word/document.xml");
+    if (!file) return "";
+    const xml: string = await file.async("text");
+    return xml.split(/<\/w:p>/).map((p) => strip(p)).filter(Boolean).join("\n");
+  }
+
+  if (kind === "pptx") {
+    const names = Object.keys(zip.files)
+      .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+      .sort((a, b) => {
+        const na = parseInt(a.match(/slide(\d+)/)?.[1] ?? "0", 10);
+        const nb = parseInt(b.match(/slide(\d+)/)?.[1] ?? "0", 10);
+        return na - nb;
+      });
+    const out: string[] = [];
+    for (const name of names) {
+      const xml: string = await zip.file(name)!.async("text");
+      out.push(strip(xml));
+    }
+    return out.join("\n");
+  }
+
+  if (kind === "xlsx") {
+    const shared = zip.file("xl/sharedStrings.xml");
+    const texts: string[] = [];
+    const seen = new Set<string>();
+    if (shared) {
+      const xml: string = await shared.async("text");
+      for (const m of xml.matchAll(/<t[^<]*>([\s\S]*?)<\/t>/g)) {
+        const t = strip(m[1]);
+        if (t && !seen.has(t)) {
+          seen.add(t);
+          texts.push(t);
+        }
+      }
+    }
+    if (texts.length) return texts.join("\n");
+    const cells: string[] = [];
+    const sheets = Object.keys(zip.files)
+      .filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n))
+      .sort();
+    for (const name of sheets) {
+      const xml: string = await zip.file(name)!.async("text");
+      for (const m of xml.matchAll(/<v>([^<]*)<\/v>/g)) {
+        const v = m[1].trim();
+        if (v) cells.push(v);
+      }
+    }
+    return cells.join("\n");
+  }
+  return "";
+}
+
+async function storeOriginal(
+  b64: string,
+  mime: string,
+  name: string,
+  userId: string,
+  kind: string
+): Promise<{
+  file_path: string;
+  file_mime: string;
+  file_size: number;
+  file_name: string;
+  file_kind: string;
+  url: string;
+}> {
+  const ext = extOf(name) || ".bin";
+  const path = `${userId}/${randomUuid()}${ext}`;
+  const bytes = base64ToBytes(b64);
+  const { error } = await supabase.storage.from(KB_BUCKET).upload(path, bytes, {
+    contentType: mime,
+    upsert: true,
+  });
+  if (error) throw new Error("Failed to store original file: " + error.message);
+  return {
+    file_path: path,
+    file_mime: mime,
+    file_size: bytes.length,
+    file_name: name,
+    file_kind: kind,
+    url: `${SUPABASE_URL}/storage/v1/object/public/${KB_BUCKET}/${path}`,
+  };
+}
+
 async function extractPdfText(pdfBase64: string): Promise<string> {
   const pdfjsLib: any = await import(
     "https://esm.sh/pdfjs-dist@3.11.174/legacy/build/pdf.mjs?deps=esm.sh,v138"
@@ -108,18 +260,50 @@ async function handler(req: Request): Promise<Response> {
   }
 
   let content = "";
-  if (typeof body?.content === "string" && body.content.trim()) {
-    content = body.content.trim();
-  } else if (typeof body?.pdfBase64 === "string" && body.pdfBase64) {
-    try {
+  let file:
+    | {
+        file_path: string;
+        file_mime: string;
+        file_size: number;
+        file_name: string;
+        file_kind: string;
+        url: string;
+      }
+    | undefined;
+
+  const fileName = String(body?.fileName ?? title);
+  const ext = extOf(fileName);
+  const isOffice = OFFICE_EXTS.has(ext);
+  const isImage = IMAGE_EXTS.has(ext) || (typeof body?.imageBase64 === "string" && !!body.imageBase64);
+
+  try {
+    if (typeof body?.content === "string" && body.content.trim()) {
+      content = body.content.trim();
+    } else if (typeof body?.pdfBase64 === "string" && body.pdfBase64) {
       content = await extractPdfText(body.pdfBase64);
-    } catch (e) {
-      return json({
-        error: "Couldn't read this PDF: " + (e instanceof Error ? e.message : "parse failed"),
-      }, 400);
+      file = await storeOriginal(body.pdfBase64, "application/pdf", fileName, user.id, "pdf");
+    } else if (typeof body?.imageBase64 === "string" && body.imageBase64) {
+      const mime = typeof body?.mime === "string" && body.mime
+        ? body.mime
+        : (isImage && ext ? "image/" + ext.slice(1) : "image/png");
+      content = await describeImage(body.imageBase64, mime);
+      file = await storeOriginal(body.imageBase64, mime, fileName, user.id, "image");
+    } else if (typeof body?.officeBase64 === "string" && body.officeBase64 && isOffice) {
+      const kind = ext.slice(1); // docx | pptx | xlsx
+      const mime = typeof body?.mime === "string" && body.mime ? body.mime : officeMimeOf(ext);
+      content = await extractOfficeText(body.officeBase64, kind);
+      if (!content.trim()) throw new Error("Couldn't extract any text from this document");
+      file = await storeOriginal(body.officeBase64, mime, fileName, user.id, kind);
     }
+  } catch (e) {
+    return json({
+      error: "Couldn't read this file: " + (e instanceof Error ? e.message : "parse failed"),
+    }, 400);
   }
-  if (!content.trim()) return json({ error: "content or pdfBase64 is required" }, 400);
+
+  if (!content.trim()) {
+    return json({ error: "content, pdfBase64, imageBase64, or officeBase64 is required" }, 400);
+  }
   if (content.length > MAX_CONTENT_LEN) {
     return json({ error: `content is too long (max ${MAX_CONTENT_LEN} characters)` }, 400);
   }
@@ -142,7 +326,21 @@ async function handler(req: Request): Promise<Response> {
       return json({ error: "Embedding service unavailable: " + (e as Error).message }, 500);
     }
     for (let j = 0; j < slice.length; j += 1) {
-      rows.push({ title, content: slice[j], embedding: vectors[j] ?? [], uploaded_by: user.id });
+      rows.push({
+        title,
+        content: slice[j],
+        embedding: vectors[j] ?? [],
+        uploaded_by: user.id,
+        ...(file
+          ? {
+              file_path: file.file_path,
+              file_mime: file.file_mime,
+              file_size: file.file_size,
+              file_name: file.file_name,
+              file_kind: file.file_kind,
+            }
+          : {}),
+      });
     }
   }
 
@@ -151,6 +349,16 @@ async function handler(req: Request): Promise<Response> {
     return json({ error: "Failed to store documents: " + insertErr.message }, 500);
   }
 
+  if (file) {
+    return json({
+      chunksStored: rows.length,
+      title,
+      url: file.url,
+      mime: file.file_mime,
+      name: file.file_name,
+      kind: file.file_kind,
+    });
+  }
   return json({ chunksStored: rows.length, title });
 }
 

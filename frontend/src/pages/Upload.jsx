@@ -8,6 +8,20 @@ import { BRAND } from '../config/brand.js';
 const MAX_TITLE_LEN = 200;
 const MAX_CONTENT_LEN = 200000; // ~200k chars, comfortably below edge-function compute limits
 const MAX_PDF_MB = 8;
+const SUPPORTED_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
+const SUPPORTED_OFFICE_EXTS = ['.docx', '.pptx', '.xlsx'];
+
+function isSupportedFile(file) {
+  const lower = file.name.toLowerCase();
+  const ext = lower.slice(lower.lastIndexOf('.'));
+  return (
+    file.type === 'application/pdf' ||
+    lower.endsWith('.pdf') ||
+    file.type.startsWith('image/') ||
+    SUPPORTED_IMAGE_EXTS.includes(ext) ||
+    SUPPORTED_OFFICE_EXTS.includes(ext)
+  );
+}
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -65,11 +79,11 @@ export default function Upload() {
       if (!trimmedContent) return 'Document text is required.';
       if (trimmedContent.length > MAX_CONTENT_LEN) return `Document text is too long (max ${MAX_CONTENT_LEN.toLocaleString()} characters).`;
     } else {
-      if (pdfFiles.length === 0) return 'Please select at least one PDF file.';
-      const badType = pdfFiles.find(f => f.type !== 'application/pdf');
-      if (badType) return `Only PDF files are allowed: ${badType.name}`;
+      if (pdfFiles.length === 0) return 'Please select at least one file.';
+      const badType = pdfFiles.find(f => !isSupportedFile(f));
+      if (badType) return `Unsupported file: ${badType.name} (PDF, images, DOCX/PPTX/XLSX allowed)`;
       const tooBig = pdfFiles.find(f => f.size / (1024 * 1024) > MAX_PDF_MB);
-      if (tooBig) return `PDF is too large (max ${MAX_PDF_MB}MB): ${tooBig.name}`;
+      if (tooBig) return `File is too large (max ${MAX_PDF_MB}MB): ${tooBig.name}`;
     }
     return '';
   };
@@ -93,7 +107,15 @@ export default function Upload() {
         for (let i = 0; i < pdfFiles.length; i++) {
           const file = pdfFiles[i];
           setStatus(`Uploading… (${i + 1}/${pdfFiles.length})`);
-          const body = { title: file.name, pdfBase64: await fileToBase64(file) };
+          const lower = file.name.toLowerCase();
+          const body = { title: file.name, fileName: file.name, mime: file.type || undefined };
+          if (file.type === 'application/pdf' || lower.endsWith('.pdf')) {
+            body.pdfBase64 = await fileToBase64(file);
+          } else if (file.type.startsWith('image/') || SUPPORTED_IMAGE_EXTS.some(e => lower.endsWith(e))) {
+            body.imageBase64 = await fileToBase64(file);
+          } else {
+            body.officeBase64 = await fileToBase64(file);
+          }
           const res = await fetch(
             `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ingest`,
             {
@@ -109,7 +131,7 @@ export default function Upload() {
           if (!res.ok) { throw new Error(data.error || 'Upload failed. Please try again.'); }
           totalChunks += data.chunksStored;
         }
-        setStatus(`Done! Stored ${totalChunks} chunks from ${pdfFiles.length} PDF(s).`);
+        setStatus(`Done! Stored ${totalChunks} chunks from ${pdfFiles.length} file(s).`);
       } else {
         const body = { title: title.trim(), content: content.trim() };
         const res = await fetch(
@@ -182,7 +204,7 @@ export default function Upload() {
             Paste Text
           </button>
           <button type="button" onClick={() => setMode('pdf')} style={tabStyle(mode === 'pdf')}>
-            Upload PDF
+            Upload Files
           </button>
         </div>
 
@@ -218,11 +240,11 @@ export default function Upload() {
           ) : (
             <>
               <label style={{ display: 'block', fontSize: 12, color: A.muted, margin: '14px 0 4px' }}>
-                PDF file(s) (max {MAX_PDF_MB}MB each, select multiple)
+                Files (max {MAX_PDF_MB}MB each, select multiple) — PDF, images, DOCX/PPTX/XLSX
               </label>
               <input
                 type="file"
-                accept="application/pdf,.pdf"
+                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.docx,.pptx,.xlsx,application/pdf,image/*"
                 multiple
                 onChange={e => setPdfFiles(Array.from(e.target.files || []))}
                 style={{ ...inputStyle, padding: '8px 12px' }}

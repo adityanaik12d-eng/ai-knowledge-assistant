@@ -715,6 +715,10 @@ export default function Dashboard() {
                 >
                   <td style={{ padding: '12px', verticalAlign: 'middle', wordBreak: 'break-all', maxWidth: 300, color: A.text }}>
                     {doc.title}
+                    {' '}
+                    {doc.isFile && (
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: A.primary }}>[{doc.fileKind || 'file'}]</span>
+                    )}
                   </td>
                   <td style={{ padding: '12px', verticalAlign: 'middle', color: A.text }}>
                     {resolveUploaderEmail(doc.uploaded_by)}
@@ -724,6 +728,18 @@ export default function Dashboard() {
                     {(doc.totalChars || 0).toLocaleString()} characters
                   </td>
                   <td style={{ padding: '12px', verticalAlign: 'middle', color: A.text }}>{formatDate(doc.firstUploaded)}</td>
+                  <td style={{ padding: '12px', verticalAlign: 'middle' }}>
+                    {doc.isFile && doc.filePath && (
+                      <a
+                        href={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/kb-files/${doc.filePath}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: 12, color: A.primary, fontWeight: 600, textDecoration: 'none', marginRight: 12 }}
+                      >
+                        View ↗
+                      </a>
+                    )}
+                  </td>
                   <td style={{ padding: '12px', verticalAlign: 'middle' }}>
                     {!deleteDocumentConfirm ||
                      (deleteDocumentConfirm.title !== doc.title || deleteDocumentConfirm.uploaded_by !== doc.uploaded_by) ? (

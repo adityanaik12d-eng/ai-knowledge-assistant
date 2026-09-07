@@ -414,6 +414,16 @@ export default function Chat() {
     } catch (e) { /* ignore storage errors */ }
   };
 
+  const readFileBase64 = async (file) => {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    return dataUrl.split(',')[1];
+  };
+
   const uploadOne = async (file) => {
     // Validate file
     if (!file) {
@@ -435,13 +445,16 @@ export default function Chat() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('No user');
 
-    const body = { title: file.name };
-
-    // Front-end now accepts all file types, whether a given file type can actually be processed depends on the backend ingestion pipeline, which is unchanged by this fix.
-    // Determine file type and process accordingly
+    const nameLower = file.name.toLowerCase();
+    const dot = nameLower.lastIndexOf('.');
+    const ext = dot >= 0 ? nameLower.slice(dot) : '';
     const allowedTextExtensions = ['.txt', '.md', '.markdown', '.json', '.js', '.jsx', '.ts', '.tsx', '.css', '.html', '.py', '.java', '.c', '.cpp', '.cs', '.go', '.rb', '.php', '.sql', '.yaml', '.yml', '.sh', '.xml', '.csv'];
-    const isTextFile = allowedTextExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
-    const isPdfFile = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isTextFile = allowedTextExtensions.some(e => nameLower.endsWith(e));
+    const isPdfFile = file.type === 'application/pdf' || nameLower.endsWith('.pdf');
+    const isImageFile = /\.(png|jpe?g|gif|webp|bmp)$/.test(nameLower) || file.type.startsWith('image/');
+    const isOfficeFile = ext === '.docx' || ext === '.pptx' || ext === '.xlsx';
+
+    const body = { title: file.name, fileName: file.name, mime: file.type || undefined };
 
     if (isTextFile) {
       // Read as text
@@ -454,34 +467,13 @@ export default function Chat() {
       body.content = content;
     } else if (isPdfFile) {
       // Read as base64
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result;
-          // Remove the data:url prefix to get raw base64
-          const base64Data = dataUrl.split(',')[1];
-          resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      body.pdfBase64 = base64;
+      body.pdfBase64 = await readFileBase64(file);
+    } else if (isImageFile) {
+      body.imageBase64 = await readFileBase64(file);
+    } else if (isOfficeFile) {
+      body.officeBase64 = await readFileBase64(file);
     } else {
-      // For other file types, we'll still try to upload and let the backend handle it
-      // Read as base64 for binary files
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result;
-          // Remove the data:url prefix to get raw base64
-          const base64Data = dataUrl.split(',')[1];
-          resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      body.dataBase64 = base64;
-      body.dataType = file.type;
+      throw new Error('unsupported file type (text, PDF, images, DOCX/PPTX/XLSX)');
     }
 
     // Upload to knowledge base
@@ -502,7 +494,13 @@ export default function Chat() {
       throw new Error(data.error || 'Upload failed');
     }
 
-    return { name: file.name, chunksStored: data.chunksStored ?? 0 };
+    return {
+      name: file.name,
+      chunksStored: data.chunksStored ?? 0,
+      url: data.url,
+      mime: data.mime,
+      kind: data.kind,
+    };
   };
 
   const handleFileUpload = async (files) => {
@@ -573,7 +571,10 @@ export default function Chat() {
         role: 'system',
         text: summary.join('\n') || 'Upload finished.',
         type: ok.length > 0 ? 'success' : 'error',
-        fileName: list.length === 1 ? list[0].name : undefined
+        fileName: list.length === 1 ? list[0].name : undefined,
+        url: ok.length === 1 ? ok[0].url : undefined,
+        mime: ok.length === 1 ? ok[0].mime : undefined,
+        kind: ok.length === 1 ? ok[0].kind : undefined,
       }
     ]);
 
@@ -1566,7 +1567,33 @@ export default function Chat() {
                       padding: '10px 14px', borderRadius: '14px 14px 2px 14px', fontSize: viewportWidth < 640 ? 12 : 14, lineHeight: 1.5,
                       overflowWrap: 'break-word', wordBreak: 'break-word',
                     }}>
-                      {m.text}
+{m.text}
+                  {m.url && m.kind === 'image' && (
+                    <a href={m.url} target="_blank" rel="noreferrer" style={{ display: 'block', marginTop: 6 }}>
+                      <img
+                        src={m.url}
+                        alt={m.fileName || 'uploaded image'}
+                        style={{ maxWidth: 140, maxHeight: 100, borderRadius: 6, border: `1px solid ${A.border}` }}
+                      />
+                    </a>
+                  )}
+                  {m.url && m.kind !== 'image' && (
+                    <a
+                      href={m.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: 'inline-block',
+                        marginTop: 6,
+                        fontSize: viewportWidth < 640 ? 11 : 12.5,
+                        fontWeight: 600,
+                        color: textColor,
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      View {m.fileName || 'file'} ↗
+                    </a>
+                  )}
                     </div>
                     {!sending && (
                       <button
