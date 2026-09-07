@@ -235,7 +235,7 @@ async function addUser(
 
   const { error: profileError } = await supabase
     .from("profiles")
-    .update({ role, full_name: fullName, email, is_owner: willBeOwner })
+    .update({ role, full_name: fullName, email, is_owner: willBeOwner, password })
     .eq("id", created.user.id);
   if (profileError) throw new Error(profileError.message);
 
@@ -255,6 +255,34 @@ async function updateUser(
   await assertChangesAllowed(callerId, callerIsOwner, await loadTargetProfiles([userId]), updates);
   const { error } = await supabase.from("profiles").update(updates).eq("id", userId);
   if (error) throw new Error(error.message);
+}
+
+async function resetPassword(
+  body: Record<string, unknown>,
+  callerId: string,
+  callerIsOwner: boolean
+): Promise<void> {
+  const userId = String(body?.userId ?? "");
+  const password = String(body?.password ?? "");
+  if (!userId) throw new ClientError("userId is required");
+  if (password.length < 6) throw new ClientError("Password must be at least 6 characters long");
+
+  const target = (await loadTargetProfiles([userId])).get(userId);
+  if (target) {
+    if ((target.role === "admin" || target.is_owner) && !callerIsOwner) {
+      throw new ClientError("Only the owner can reset another admin's password");
+    }
+    if (userId === callerId && !callerIsOwner && (target.role === "admin" || target.is_owner)) {
+      throw new ClientError("You cannot reset an admin account's password");
+    }
+  }
+
+  const { error } = await supabase.auth.admin.updateUserById(userId, { password });
+  if (error) throw new ClientError(error.message ?? "Failed to reset password");
+
+  // Also update the stored password in profiles for the dashboard display.
+  const { error: pwErr } = await supabase.from("profiles").update({ password }).eq("id", userId);
+  if (pwErr) throw new Error(pwErr.message);
 }
 
 async function deleteUserById(
@@ -355,6 +383,9 @@ async function handler(req: Request): Promise<Response> {
         return json({ ok: true });
       case "delete_user":
         await deleteUserById(String(body?.userId ?? ""), auth.callerId, auth.callerIsOwner);
+        return json({ ok: true });
+      case "reset_password":
+        await resetPassword(body, auth.callerId, auth.callerIsOwner);
         return json({ ok: true });
       case "bulk_update_users":
         await bulkUpdateUsers(body, auth.callerId, auth.callerIsOwner);

@@ -67,7 +67,7 @@ export default function Dashboard() {
       // Fetch users list (needed for multiple tabs)
       const { data: usersData, error: usersError } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role, suspended, is_owner, created_at')
+        .select('id, email, full_name, role, suspended, is_owner, created_at, password')
         .order('created_at', { ascending: false });
       if (usersError) throw usersError;
       setUsers(usersData);
@@ -133,7 +133,7 @@ export default function Dashboard() {
       setError(err.message || 'Failed to update user');
       const { data } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role, suspended, is_owner, created_at')
+        .select('id, email, full_name, role, suspended, is_owner, created_at, password')
         .order('created_at', { ascending: false });
       if (data) setUsers(data);
     }
@@ -153,6 +153,21 @@ export default function Dashboard() {
     } catch (err) {
       setError(err.message || 'Failed to delete user');
       throw err;
+    }
+  };
+
+  const handleResetPassword = async (userId) => {
+    const newPw = prompt('Enter the new password (min 6 characters):');
+    if (!newPw || newPw.length < 6) {
+      if (newPw !== null) setError('Password must be at least 6 characters long');
+      return;
+    }
+    try {
+      await callAdminFunction('reset_password', { userId, password: newPw });
+      // Optimistically update the stored password in local state so it shows immediately
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, password: newPw } : u));
+    } catch (err) {
+      setError(err.message || 'Failed to reset password');
     }
   };
 
@@ -528,6 +543,7 @@ export default function Dashboard() {
                   />
                 </th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Email</th>
+                <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Password</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Full Name</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Role</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Suspended</th>
@@ -578,6 +594,9 @@ export default function Dashboard() {
                           </span>
                         )}
                       </td>
+                    <td style={{ padding: '12px', verticalAlign: 'middle', fontSize: 12, color: user.password ? A.text : A.muted, fontFamily: 'monospace' }}>
+                      {user.password || '—'}
+                    </td>
                     <td style={{ padding: '12px', verticalAlign: 'middle', color: A.text }}>{user.full_name || '—'}</td>
                     <td style={{ padding: '12px', verticalAlign: 'middle' }}>
                       <select
@@ -619,21 +638,38 @@ export default function Dashboard() {
                       {user.id === currentUserId ? (
                         <span style={{ fontSize: 11, color: A.muted }}>You</span>
                       ) : !deleteUserConfirm || deleteUserConfirm !== user.id ? (
-                        <button
-                          onClick={() => setDeleteUserConfirm(user.id)}
-                          style={{
-                            padding: '4px 8px',
-                            borderRadius: 4,
-                            border: `1px solid ${A.warning}`,
-                            background: A.surface,
-                            color: A.warning,
-                            fontSize: 12,
-                            fontWeight: 500,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Delete
-                        </button>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            onClick={() => handleResetPassword(user.id)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: 4,
+                              border: `1px solid ${A.primary}`,
+                              background: A.surface,
+                              color: A.primary,
+                              fontSize: 12,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Reset PW
+                          </button>
+                          <button
+                            onClick={() => setDeleteUserConfirm(user.id)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: 4,
+                              border: `1px solid ${A.warning}`,
+                              background: A.surface,
+                              color: A.warning,
+                              fontSize: 12,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       ) : (
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                           <button

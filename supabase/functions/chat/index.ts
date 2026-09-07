@@ -97,22 +97,8 @@ async function handler(req: Request): Promise<Response> {
   }
 
   // Fast path: if the Gemini provider is currently rate-limited (429 seen
-  // recently), answer immediately without touching Gemini.
-  const limitUntil = await getLimitUntil();
-  if (Date.now() < limitUntil) {
-    return json(
-      {
-        code: "quota_exceeded",
-        error:
-          "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
-        resetAt: limitUntil,
-      },
-      429
-    );
-  }
-
-  // Plan-based message quota: free users get FREE_LIMIT questions per 2-hour window
-  // (premium and admin users are unlimited).
+  // Plan-based message quota + provider-rate-limit cooldown.
+  // Only free users are limited — premium and admin accounts are unlimited.
   {
     const FREE_LIMIT = Number(Deno.env.get("FREE_MSG_LIMIT")) || 20;
     const WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -124,6 +110,21 @@ async function handler(req: Request): Promise<Response> {
         .maybeSingle();
       const role = profile?.role ?? "free";
       if (role === "free") {
+        // If the Gemini provider was recently rate-limited (429 seen), answer
+        // immediately with the friendly limit message instead of re-calling it.
+        const limitUntil = await getLimitUntil();
+        if (Date.now() < limitUntil) {
+          return json(
+            {
+              code: "quota_exceeded",
+              error:
+                "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
+              resetAt: limitUntil,
+            },
+            429
+          );
+        }
+        // Free users get FREE_LIMIT questions per 2-hour window.
         const since = new Date(Date.now() - WINDOW_MS).toISOString();
         const { count } = await supabase
           .from("messages")
