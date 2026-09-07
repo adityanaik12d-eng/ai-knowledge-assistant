@@ -712,7 +712,15 @@ export default function Chat() {
 
       if (!res.ok || !res.body) {
         let errMsg = 'Something went wrong.';
-        try { const data = await res.json(); errMsg = data.error || errMsg; } catch (e) {}
+        let resetAt = null;
+        try {
+          const data = await res.json();
+          errMsg = data.error || errMsg;
+          resetAt = data.resetAt || null;
+        } catch (e) {}
+        if (resetAt) {
+          errMsg = `${errMsg} (Your limit resets at ${new Date(resetAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})`;
+        }
         setMessages((prev) => {
           const next = [...prev];
           next[assistantIndex] = { role: 'error', text: errMsg };
@@ -759,7 +767,11 @@ export default function Chat() {
                 } else if (evt.type === 'error') {
                   setMessages((prev) => {
                     const next = [...prev];
-                    next[assistantIndex] = { role: 'error', text: evt.error };
+                    let text = evt.error;
+                    if (evt.resetAt) {
+                      text = `${text} (Your limit resets at ${new Date(evt.resetAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})`;
+                    }
+                    next[assistantIndex] = { role: 'error', text };
                     return next;
                   });
                 }

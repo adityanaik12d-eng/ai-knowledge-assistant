@@ -87,8 +87,9 @@ async function handler(req: Request): Promise<Response> {
             {
               code: "quota_exceeded",
               error:
-                `You've reached the free plan limit (${FREE_LIMIT} questions per 2 hours). ` +
-                "Please try again later, or upgrade to Premium for unlimited access.",
+                `You've reached your free-plan answer limit (${FREE_LIMIT} questions per 2 hours). ` +
+                "Please try again in a bit, or upgrade to Premium for unlimited answers.",
+              resetAt: Date.now() + WINDOW_MS,
             },
             429
           );
@@ -186,8 +187,20 @@ async function handler(req: Request): Promise<Response> {
         );
 
         if (!gRes.ok || !gRes.body) {
-          const errText = await gRes.text().catch(() => "");
-          send({ type: "error", error: `LLM request failed (${gRes.status}): ${errText.slice(0, 300)}` });
+          if (gRes.status === 429) {
+            send({
+                type: "error",
+                error:
+                  "You've reached your answer limit for now. Please try again in about 2 hours, or upgrade to Premium for unlimited access.",
+                resetAt: Date.now() + 2 * 60 * 60 * 1000,
+              });
+            controller.close();
+            return;
+          }
+          send({
+            type: "error",
+            error: "Sorry, we couldn't generate an answer right now. Please try again in a moment.",
+          });
           controller.close();
           return;
         }
