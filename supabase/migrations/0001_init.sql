@@ -42,8 +42,9 @@ create table if not exists public.documents (
   created_at timestamptz not null default now()
 );
 
-create index if not exists documents_embedding_idx
-  on public.documents using hnsw (embedding vector_cosine_ops);
+-- NOTE: no vector index here — pgvector HNSW/IVFFlat indices cap at 2000 dims,
+-- and 3072-dim Gemini embeddings exceed that. Exact cosine search is fast enough
+-- for the size of a per-client knowledge base.
 
 -- vector search helper (called by the /chat edge function)
 create or replace function public.match_documents(
