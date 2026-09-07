@@ -21,7 +21,7 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const ALLOWED_PROFILE_FIELDS = new Set(["role", "suspended", "full_name"]);
+const ALLOWED_PROFILE_FIELDS = new Set(["role", "suspended", "full_name", "is_owner"]);
 const VALID_ROLES = new Set(["admin", "free", "premium"]);
 
 function pickProfileFields(body: Record<string, unknown>): Record<string, unknown> {
@@ -35,7 +35,7 @@ function pickProfileFields(body: Record<string, unknown>): Record<string, unknow
 async function requireAdmin(
   req: Request
 ): Promise<
-  { ok: true; callerId: string } | { ok: false; status: number; body: { error: string } }
+  { ok: true; callerId: string; callerIsOwner: boolean } | { ok: false; status: number; body: { error: string } }
 > {
   const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!token) return { ok: false, status: 401, body: { error: "Unauthorized" } };
@@ -43,12 +43,86 @@ async function requireAdmin(
   if (error || !data?.user) return { ok: false, status: 401, body: { error: "Unauthorized" } };
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, suspended")
+    .select("role, suspended, is_owner")
     .eq("id", data.user.id)
     .maybeSingle();
   if (!profile || profile.role !== "admin") return { ok: false, status: 403, body: { error: "Forbidden" } };
   if (profile.suspended) return { ok: false, status: 403, body: { error: "Account suspended" } };
-  return { ok: true, callerId: data.user.id };
+  return { ok: true, callerId: data.user.id, callerIsOwner: profile.is_owner === true };
+}
+
+async function loadTargetProfiles(
+  ids: string[]
+): Promise<Map<string, { role: string; suspended: boolean; is_owner: boolean }>> {
+  const map = new Map<string, { role: string; suspended: boolean; is_owner: boolean }>();
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  if (unique.length === 0) return map;
+  const { data: rows, error } = await supabase
+    .from("profiles")
+    .select("id, role, suspended, is_owner")
+    .in("id", unique);
+  if (error) throw new Error(error.message);
+  for (const row of rows ?? []) {
+    map.set(String(row.id), {
+      role: String(row.role ?? "free"),
+      suspended: row.suspended === true,
+      is_owner: row.is_owner === true,
+    });
+  }
+  return map;
+}
+
+async function activeAdminCount(): Promise<number> {
+  const { count } = await supabase
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "admin")
+    .eq("suspended", false);
+  return count ?? 0;
+}
+
+// Guard rails so admins cannot lock each other (or themselves) out.
+// - Self-guard: nobody can change their own role or suspension status
+// - Owner protection: only the owner may manage other admins / owners
+// - Promotion guard: only the owner may create or promote admins
+// - Last-admin guard: the final active admin can never be demoted or suspended
+async function assertChangesAllowed(
+  callerId: string,
+  callerIsOwner: boolean,
+  targets: Map<string, { role: string; suspended: boolean; is_owner: boolean }>,
+  updates: Record<string, unknown>
+): Promise<void> {
+  const removingAdminRights =
+    (updates.role !== undefined && updates.role !== "admin") ||
+    updates.suspended === true;
+
+  if (updates.role === "admin" && !callerIsOwner) {
+    throw new ClientError("Only the owner can create or promote admins");
+  }
+  if (updates.is_owner !== undefined && !callerIsOwner) {
+    throw new ClientError("Only the owner can change the owner flag");
+  }
+
+  for (const [id, target] of targets) {
+    if (id === callerId) {
+      if (updates.role !== undefined || updates.suspended !== undefined) {
+        throw new ClientError("You cannot change your own role or suspension status");
+      }
+      if (updates.is_owner !== undefined) {
+        throw new ClientError("You cannot change your own owner status");
+      }
+      continue;
+    }
+    if ((target.role === "admin" || target.is_owner) && !callerIsOwner) {
+      throw new ClientError("Only the owner can change another admin's role or suspension status");
+    }
+    if (removingAdminRights && target.role === "admin" && !target.suspended) {
+      const activeAdmins = await activeAdminCount();
+      if (activeAdmins <= 1) {
+        throw new ClientError("Cannot demote or suspend the last active admin");
+      }
+    }
+  }
 }
 
 async function listDocuments(): Promise<unknown[]> {
@@ -121,7 +195,11 @@ async function usageStats(): Promise<Record<string, number>> {
   };
 }
 
-async function addUser(body: Record<string, unknown>): Promise<{ id: string; email: string }> {
+async function addUser(
+  body: Record<string, unknown>,
+  callerId: string,
+  callerIsOwner: boolean
+): Promise<{ id: string; email: string }> {
   const email = String(body?.email ?? "").trim().toLowerCase();
   const password = String(body?.password ?? "");
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -129,6 +207,18 @@ async function addUser(body: Record<string, unknown>): Promise<{ id: string; ema
   }
   if (password.length < 6) {
     throw new ClientError("Password must be at least 6 characters long");
+  }
+
+  const role = VALID_ROLES.has(String(body?.role ?? "")) ? String(body.role) : "free";
+  const willBeOwner = body?.is_owner === true && callerIsOwner;
+  if (role === "admin" && !callerIsOwner) {
+    throw new ClientError("Only the owner can create admin accounts");
+  }
+  if (body?.is_owner === true && !callerIsOwner) {
+    throw new ClientError("Only the owner can create owner accounts");
+  }
+  if (willBeOwner && role !== "admin") {
+    throw new ClientError("Owner accounts must have the admin role");
   }
 
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
@@ -141,55 +231,81 @@ async function addUser(body: Record<string, unknown>): Promise<{ id: string; ema
     throw new ClientError(createError?.message ?? "Failed to create user");
   }
 
-  const role = VALID_ROLES.has(String(body?.role ?? "")) ? String(body.role) : "free";
   const fullName = typeof body?.full_name === "string" && body.full_name ? String(body.full_name) : created.user.email;
 
   const { error: profileError } = await supabase
     .from("profiles")
-    .update({ role, full_name: fullName, email })
+    .update({ role, full_name: fullName, email, is_owner: willBeOwner })
     .eq("id", created.user.id);
   if (profileError) throw new Error(profileError.message);
 
   return { id: created.user.id, email };
 }
 
-async function updateUser(body: Record<string, unknown>, callerId: string): Promise<void> {
+async function updateUser(
+  body: Record<string, unknown>,
+  callerId: string,
+  callerIsOwner: boolean
+): Promise<void> {
   const userId = String(body?.userId ?? "");
   const updates = pickProfileFields(body);
   if (!userId || Object.keys(updates).length === 0) {
     throw new ClientError("userId and at least one field are required");
   }
-  if (updates.suspended === true && userId === callerId) {
-    throw new ClientError("You cannot suspend your own account");
-  }
+  await assertChangesAllowed(callerId, callerIsOwner, await loadTargetProfiles([userId]), updates);
   const { error } = await supabase.from("profiles").update(updates).eq("id", userId);
   if (error) throw new Error(error.message);
 }
 
-async function deleteUserById(userId: string): Promise<void> {
+async function deleteUserById(
+  userId: string,
+  callerId: string,
+  callerIsOwner: boolean
+): Promise<void> {
   if (!userId) throw new ClientError("userId is required");
+  if (userId === callerId) {
+    throw new ClientError("You cannot delete your own account");
+  }
+  const target = (await loadTargetProfiles([userId])).get(userId);
+  if (target) {
+    if ((target.role === "admin" || target.is_owner) && !callerIsOwner) {
+      throw new ClientError("Only the owner can delete another admin");
+    }
+    if (target.role === "admin" && !target.suspended) {
+      const activeAdmins = await activeAdminCount();
+      if (activeAdmins <= 1) {
+        throw new ClientError("Cannot delete the last active admin");
+      }
+    }
+  }
   const { error } = await supabase.auth.admin.deleteUser(userId);
   if (error) throw new Error(error.message);
 }
 
-async function bulkUpdateUsers(body: Record<string, unknown>, callerId: string): Promise<void> {
+async function bulkUpdateUsers(
+  body: Record<string, unknown>,
+  callerId: string,
+  callerIsOwner: boolean
+): Promise<void> {
   const ids = Array.isArray(body.userIds) ? body.userIds.map(String).filter(Boolean) : [];
   const updates = pickProfileFields(body);
   if (ids.length === 0 || Object.keys(updates).length === 0) {
     throw new ClientError("userIds and at least one field are required");
   }
-  if (updates.suspended === true && ids.includes(callerId)) {
-    throw new ClientError("You cannot suspend your own account");
-  }
+  await assertChangesAllowed(callerId, callerIsOwner, await loadTargetProfiles(ids), updates);
   const { error } = await supabase.from("profiles").update(updates).in("id", ids);
   if (error) throw new Error(error.message);
 }
 
-async function bulkDeleteUsers(body: Record<string, unknown>): Promise<number> {
+async function bulkDeleteUsers(
+  body: Record<string, unknown>,
+  callerId: string,
+  callerIsOwner: boolean
+): Promise<number> {
   const ids = Array.isArray(body.userIds) ? body.userIds.map(String).filter(Boolean) : [];
   if (ids.length === 0) throw new ClientError("userIds is required");
   for (const id of ids) {
-    await deleteUserById(id);
+    await deleteUserById(id, callerId, callerIsOwner);
   }
   return ids.length;
 }
@@ -233,18 +349,18 @@ async function handler(req: Request): Promise<Response> {
       case "usage_stats":
         return json({ stats: await usageStats() });
       case "add_user":
-        return json({ user: await addUser(body) });
+        return json({ user: await addUser(body, auth.callerId, auth.callerIsOwner) });
       case "update_user":
-        await updateUser(body, auth.callerId);
+        await updateUser(body, auth.callerId, auth.callerIsOwner);
         return json({ ok: true });
       case "delete_user":
-        await deleteUserById(String(body?.userId ?? ""));
+        await deleteUserById(String(body?.userId ?? ""), auth.callerId, auth.callerIsOwner);
         return json({ ok: true });
       case "bulk_update_users":
-        await bulkUpdateUsers(body, auth.callerId);
+        await bulkUpdateUsers(body, auth.callerId, auth.callerIsOwner);
         return json({ ok: true });
       case "bulk_delete_users":
-        return json({ ok: true, deleted: await bulkDeleteUsers(body) });
+        return json({ ok: true, deleted: await bulkDeleteUsers(body, auth.callerId, auth.callerIsOwner) });
       case "delete_document":
         await deleteDocument(body);
         return json({ ok: true });

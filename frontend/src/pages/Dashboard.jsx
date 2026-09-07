@@ -19,6 +19,7 @@ export default function Dashboard() {
   const [usageStats, setUsageStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [selectedUserIds, setSelectedUserIds] = useState(new Set());
   const [addUserForm, setAddUserForm] = useState({
     email: '',
@@ -61,11 +62,12 @@ export default function Dashboard() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No session');
+      setCurrentUserId(session.user?.id ?? null);
 
       // Fetch users list (needed for multiple tabs)
       const { data: usersData, error: usersError } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role, suspended, created_at')
+        .select('id, email, full_name, role, suspended, is_owner, created_at')
         .order('created_at', { ascending: false });
       if (usersError) throw usersError;
       setUsers(usersData);
@@ -131,7 +133,7 @@ export default function Dashboard() {
       setError(err.message || 'Failed to update user');
       const { data } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role, suspended, created_at')
+        .select('id, email, full_name, role, suspended, is_owner, created_at')
         .order('created_at', { ascending: false });
       if (data) setUsers(data);
     }
@@ -546,6 +548,8 @@ export default function Dashboard() {
                       <input
                         type="checkbox"
                         checked={isSelected}
+                        disabled={user.id === currentUserId}
+                        title={user.id === currentUserId ? 'You cannot modify your own account' : undefined}
                         onChange={(e) => {
                           const newSet = new Set(selectedUserIds);
                           if (e.target.checked) {
@@ -557,11 +561,29 @@ export default function Dashboard() {
                         }}
                       />
                     </td>
-                    <td style={{ padding: '12px', verticalAlign: 'middle', wordBreak: 'break-all', color: A.text }}>{user.email}</td>
+                    <td style={{ padding: '12px', verticalAlign: 'middle', wordBreak: 'break-all', color: A.text }}>
+                        {user.email}
+                        {user.is_owner && (
+                          <span style={{
+                            marginLeft: 6,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            background: A.warningBg,
+                            color: A.warning,
+                            border: `1px solid ${A.warningBorder}`,
+                          }}>
+                            👑 Owner
+                          </span>
+                        )}
+                      </td>
                     <td style={{ padding: '12px', verticalAlign: 'middle', color: A.text }}>{user.full_name || '—'}</td>
                     <td style={{ padding: '12px', verticalAlign: 'middle' }}>
                       <select
                         value={user.role}
+                        disabled={user.id === currentUserId}
+                        title={user.id === currentUserId ? 'You cannot change your own role' : undefined}
                         onChange={(e) => handleUpdateUser(user.id, { role: e.target.value })}
                         style={{
                           padding: '4px 8px',
@@ -569,7 +591,7 @@ export default function Dashboard() {
                           borderRadius: 4,
                           fontSize: 12,
                           fontWeight: 500,
-                          background: A.bg,
+                          background: user.id === currentUserId ? A.disabled : A.bg,
                           color: A.text,
                         }}
                       >
@@ -579,10 +601,12 @@ export default function Dashboard() {
                       </select>
                     </td>
                     <td style={{ padding: '12px', verticalAlign: 'middle' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: user.id === currentUserId ? 'default' : 'pointer' }}>
                         <input
                           type="checkbox"
                           checked={user.suspended}
+                          disabled={user.id === currentUserId}
+                          title={user.id === currentUserId ? 'You cannot suspend your own account' : undefined}
                           onChange={(e) => handleUpdateUser(user.id, { suspended: e.target.checked })}
                           style={{ width: 14, height: 14 }}
                         />
@@ -592,7 +616,9 @@ export default function Dashboard() {
                     <td style={{ padding: '12px', verticalAlign: 'middle', color: A.text }}>{formatDate(user.created_at)}</td>
                     <td style={{ padding: '12px', verticalAlign: 'middle', color: A.text }}>{formatDate(user.last_sign_in_at)}</td>
                     <td style={{ padding: '12px', verticalAlign: 'middle' }}>
-                      {!deleteUserConfirm || deleteUserConfirm !== user.id ? (
+                      {user.id === currentUserId ? (
+                        <span style={{ fontSize: 11, color: A.muted }}>You</span>
+                      ) : !deleteUserConfirm || deleteUserConfirm !== user.id ? (
                         <button
                           onClick={() => setDeleteUserConfirm(user.id)}
                           style={{
