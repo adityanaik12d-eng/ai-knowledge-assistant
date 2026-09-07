@@ -24,8 +24,7 @@ export default function Dashboard() {
     email: '',
     password: '',
     fullName: '',
-    role: 'employee',
-    department: 'unassigned',
+    role: 'free',
   });
   const [showAddUserForm, setShowAddUserForm] = useState(false); // FIX 2: New state for form visibility
   const [deleteUserConfirm, setDeleteUserConfirm] = useState(null); // userId to confirm deletion
@@ -66,7 +65,7 @@ export default function Dashboard() {
       // Fetch users list (needed for multiple tabs)
       const { data: usersData, error: usersError } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role, department, suspended, created_at')
+        .select('id, email, full_name, role, suspended, created_at')
         .order('created_at', { ascending: false });
       if (usersError) throw usersError;
       setUsers(usersData);
@@ -109,7 +108,10 @@ export default function Dashboard() {
         body: { action, ...body },
       });
 
-      if (error) throw error;
+      if (error) {
+        const serverMsg = error.context?.error ?? error.message ?? 'Edge Function error';
+        throw new Error(typeof serverMsg === 'string' ? serverMsg : 'Edge Function error');
+      }
       return data;
     } catch (err) {
       throw err;
@@ -118,17 +120,20 @@ export default function Dashboard() {
 
   // User actions
   const handleUpdateUser = async (userId, updates) => {
+    setUsers(prev =>
+      prev.map(u =>
+        u.id === userId ? { ...u, ...updates } : u
+      )
+    );
     try {
       await callAdminFunction('update_user', { userId, ...updates });
-      // Update local state optimistically
-      setUsers(prev =>
-        prev.map(u =>
-          u.id === userId ? { ...u, ...updates } : u
-        )
-      );
     } catch (err) {
       setError(err.message || 'Failed to update user');
-      throw err;
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role, suspended, created_at')
+        .order('created_at', { ascending: false });
+      if (data) setUsers(data);
     }
   };
 
@@ -181,22 +186,20 @@ export default function Dashboard() {
   };
 
   const handleAddUser = async () => {
-    const { email, password, fullName, role, department } = addUserForm;
+    const { email, password, fullName, role } = addUserForm;
     try {
       await callAdminFunction('add_user', {
         email,
         password,
         full_name: fullName || null,
         role,
-        department,
       });
       // Reset form
       setAddUserForm({
         email: '',
         password: '',
         fullName: '',
-        role: 'employee',
-        department: 'unassigned',
+        role: 'free',
       });
       // Refresh user list
       await loadDashboardData();
@@ -346,29 +349,9 @@ export default function Dashboard() {
                     color: A.text,
                   }}
                 >
-                  <option value="employee">Employee</option>
+                  <option value="free">Free user</option>
+                  <option value="premium">Premium user</option>
                   <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: 13, color: A.text }}>Department</label>
-                <select
-                  value={addUserForm.department}
-                  onChange={(e) => setAddUserForm(prev => ({ ...prev, department: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: `1px solid ${A.border}`,
-                    borderRadius: 6,
-                    fontSize: 13,
-                    background: A.bg,
-                    color: A.text,
-                  }}
-                >
-                  <option value="unassigned">Unassigned</option>
-                  <option value="IT">IT</option>
-                  <option value="CSE">CSE</option>
-                  <option value="IT/CSE">IT/CSE</option>
                 </select>
               </div>
             </div>
@@ -392,7 +375,7 @@ export default function Dashboard() {
               {/* FIX 2: Also set showAddUserForm to false on Cancel */}
               <button
                 onClick={() => {
-                  setAddUserForm(prev => ({ ...prev, email: '', password: '', fullName: '', role: 'employee', department: 'unassigned' }));
+                  setAddUserForm(prev => ({ ...prev, email: '', password: '', fullName: '', role: 'free' }));
                   setShowAddUserForm(false);
                 }}
                 style={{
@@ -545,7 +528,6 @@ export default function Dashboard() {
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Email</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Full Name</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Role</th>
-                <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Department</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Suspended</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Created</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Last Sign In</th>
@@ -591,28 +573,9 @@ export default function Dashboard() {
                           color: A.text,
                         }}
                       >
-                        <option value="employee">Employee</option>
+                        <option value="free">Free user</option>
+                        <option value="premium">Premium user</option>
                         <option value="admin">Admin</option>
-                      </select>
-                    </td>
-                    <td style={{ padding: '12px', verticalAlign: 'middle' }}>
-                      <select
-                        value={user.department}
-                        onChange={(e) => handleUpdateUser(user.id, { department: e.target.value })}
-                        style={{
-                          padding: '4px 8px',
-                          border: `1px solid ${A.border}`,
-                          borderRadius: 4,
-                          fontSize: 12,
-                          fontWeight: 500,
-                          background: A.bg,
-                          color: A.text,
-                        }}
-                      >
-                        <option value="unassigned">Unassigned</option>
-                        <option value="IT">IT</option>
-                        <option value="CSE">CSE</option>
-                        <option value="IT/CSE">IT/CSE</option>
                       </select>
                     </td>
                     <td style={{ padding: '12px', verticalAlign: 'middle' }}>
@@ -688,7 +651,7 @@ export default function Dashboard() {
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: A.muted }}>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: A.muted }}>
                     No users found
                   </td>
                 </tr>

@@ -12,6 +12,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+class ClientError extends Error {}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -19,7 +21,8 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const ALLOWED_PROFILE_FIELDS = new Set(["role", "department", "suspended", "full_name"]);
+const ALLOWED_PROFILE_FIELDS = new Set(["role", "suspended", "full_name"]);
+const VALID_ROLES = new Set(["admin", "free", "premium"]);
 
 function pickProfileFields(body: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -31,7 +34,9 @@ function pickProfileFields(body: Record<string, unknown>): Record<string, unknow
 
 async function requireAdmin(
   req: Request
-): Promise<{ ok: true } | { ok: false; status: number; body: { error: string } }> {
+): Promise<
+  { ok: true; callerId: string } | { ok: false; status: number; body: { error: string } }
+> {
   const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!token) return { ok: false, status: 401, body: { error: "Unauthorized" } };
   const { data, error } = await supabase.auth.getUser(token);
@@ -43,7 +48,7 @@ async function requireAdmin(
     .maybeSingle();
   if (!profile || profile.role !== "admin") return { ok: false, status: 403, body: { error: "Forbidden" } };
   if (profile.suspended) return { ok: false, status: 403, body: { error: "Account suspended" } };
-  return { ok: true };
+  return { ok: true, callerId: data.user.id };
 }
 
 async function listDocuments(): Promise<unknown[]> {
@@ -120,10 +125,10 @@ async function addUser(body: Record<string, unknown>): Promise<{ id: string; ema
   const email = String(body?.email ?? "").trim().toLowerCase();
   const password = String(body?.password ?? "");
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new Error("A valid email address is required");
+    throw new ClientError("A valid email address is required");
   }
   if (password.length < 6) {
-    throw new Error("Password must be at least 6 characters long");
+    throw new ClientError("Password must be at least 6 characters long");
   }
 
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
@@ -133,43 +138,48 @@ async function addUser(body: Record<string, unknown>): Promise<{ id: string; ema
     user_metadata: { full_name: body?.full_name ?? null },
   });
   if (createError || !created?.user) {
-    throw new Error(createError?.message ?? "Failed to create user");
+    throw new ClientError(createError?.message ?? "Failed to create user");
   }
 
-  const role = body?.role === "admin" ? "admin" : "employee";
-  const department = typeof body?.department === "string" && body.department ? String(body.department) : "unassigned";
+  const role = VALID_ROLES.has(String(body?.role ?? "")) ? String(body.role) : "free";
   const fullName = typeof body?.full_name === "string" && body.full_name ? String(body.full_name) : created.user.email;
 
   const { error: profileError } = await supabase
     .from("profiles")
-    .update({ role, department, full_name: fullName, email })
+    .update({ role, full_name: fullName, email })
     .eq("id", created.user.id);
   if (profileError) throw new Error(profileError.message);
 
   return { id: created.user.id, email };
 }
 
-async function updateUser(body: Record<string, unknown>): Promise<void> {
+async function updateUser(body: Record<string, unknown>, callerId: string): Promise<void> {
   const userId = String(body?.userId ?? "");
   const updates = pickProfileFields(body);
   if (!userId || Object.keys(updates).length === 0) {
-    throw new Error("userId and at least one field are required");
+    throw new ClientError("userId and at least one field are required");
+  }
+  if (updates.suspended === true && userId === callerId) {
+    throw new ClientError("You cannot suspend your own account");
   }
   const { error } = await supabase.from("profiles").update(updates).eq("id", userId);
   if (error) throw new Error(error.message);
 }
 
 async function deleteUserById(userId: string): Promise<void> {
-  if (!userId) throw new Error("userId is required");
+  if (!userId) throw new ClientError("userId is required");
   const { error } = await supabase.auth.admin.deleteUser(userId);
   if (error) throw new Error(error.message);
 }
 
-async function bulkUpdateUsers(body: Record<string, unknown>): Promise<void> {
+async function bulkUpdateUsers(body: Record<string, unknown>, callerId: string): Promise<void> {
   const ids = Array.isArray(body.userIds) ? body.userIds.map(String).filter(Boolean) : [];
   const updates = pickProfileFields(body);
   if (ids.length === 0 || Object.keys(updates).length === 0) {
-    throw new Error("userIds and at least one field are required");
+    throw new ClientError("userIds and at least one field are required");
+  }
+  if (updates.suspended === true && ids.includes(callerId)) {
+    throw new ClientError("You cannot suspend your own account");
   }
   const { error } = await supabase.from("profiles").update(updates).in("id", ids);
   if (error) throw new Error(error.message);
@@ -177,7 +187,7 @@ async function bulkUpdateUsers(body: Record<string, unknown>): Promise<void> {
 
 async function bulkDeleteUsers(body: Record<string, unknown>): Promise<number> {
   const ids = Array.isArray(body.userIds) ? body.userIds.map(String).filter(Boolean) : [];
-  if (ids.length === 0) throw new Error("userIds is required");
+  if (ids.length === 0) throw new ClientError("userIds is required");
   for (const id of ids) {
     await deleteUserById(id);
   }
@@ -187,7 +197,7 @@ async function bulkDeleteUsers(body: Record<string, unknown>): Promise<number> {
 async function deleteDocument(body: Record<string, unknown>): Promise<void> {
   const title = String(body?.title ?? "").trim();
   const uploadedBy = body?.uploaded_by ? String(body.uploaded_by) : null;
-  if (!title) throw new Error("title is required");
+  if (!title) throw new ClientError("title is required");
 
   let query = supabase.from("documents").delete().eq("title", title);
   if (uploadedBy) query = query.eq("uploaded_by", uploadedBy);
@@ -225,13 +235,13 @@ async function handler(req: Request): Promise<Response> {
       case "add_user":
         return json({ user: await addUser(body) });
       case "update_user":
-        await updateUser(body);
+        await updateUser(body, auth.callerId);
         return json({ ok: true });
       case "delete_user":
         await deleteUserById(String(body?.userId ?? ""));
         return json({ ok: true });
       case "bulk_update_users":
-        await bulkUpdateUsers(body);
+        await bulkUpdateUsers(body, auth.callerId);
         return json({ ok: true });
       case "bulk_delete_users":
         return json({ ok: true, deleted: await bulkDeleteUsers(body) });
@@ -242,7 +252,8 @@ async function handler(req: Request): Promise<Response> {
         return json({ error: `Unknown action: ${action}` }, 400);
     }
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : "Internal error" }, 500);
+    const status = e instanceof ClientError ? 400 : 500;
+    return json({ error: e instanceof Error ? e.message : "Internal error" }, status);
   }
 }
 

@@ -6,18 +6,16 @@ const AuthContext = createContext(undefined);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
-  const [department, setDepartment] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (userId) => {
-    if (!userId) { setRole(null); setDepartment(null); return; }
+    if (!userId) { setRole(null); return; }
     const { data } = await supabase
       .from('profiles')
-      .select('role, department')
+      .select('role')
       .eq('id', userId)
       .single();
-    setRole(data?.role ?? 'employee');
-    setDepartment(data?.department ?? 'unassigned');
+    setRole(data?.role ?? 'free');
   };
 
   useEffect(() => {
@@ -56,10 +54,9 @@ export function AuthProvider({ children }) {
     supabase.auth.updateUser({ password: newPassword });
 
   const value = {
-    user, role, department, loading,
+    user, role, loading,
     signIn, signUp, signOut, resetPassword, updatePassword,
     isAdmin: role === 'admin',
-    isITCSE: department === 'IT/CSE',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

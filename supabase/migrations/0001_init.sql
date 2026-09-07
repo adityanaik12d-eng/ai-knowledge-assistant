@@ -13,8 +13,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   email text,
   full_name text,
-  role text not null default 'employee',
-  department text not null default 'unassigned',
+  role text not null default 'free',
   suspended boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -148,7 +147,7 @@ create policy documents_insert_auth on public.documents
 drop policy if exists documents_delete_admin on public.documents;
 create policy documents_delete_admin on public.documents
   for delete using (
-    coalesce((select role from public.profiles where id = auth.uid()), 'employee') = 'admin'
+    coalesce((select role from public.profiles where id = auth.uid()), 'free') = 'admin'
   );
 
 -- conversations: owners manage their own
