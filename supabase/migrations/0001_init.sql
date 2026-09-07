@@ -15,6 +15,7 @@ create table if not exists public.profiles (
   full_name text,
   role text not null default 'employee',
   department text not null default 'unassigned',
+  suspended boolean not null default false,
   created_at timestamptz not null default now()
 );
 
