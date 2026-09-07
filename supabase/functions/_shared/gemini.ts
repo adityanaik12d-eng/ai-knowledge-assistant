@@ -39,6 +39,7 @@ export async function embedText(text: string): Promise<number[]> {
         model: `models/${EMBED_MODEL}`,
         content: { parts: [{ text }] },
       }),
+      signal: AbortSignal.timeout(10000),
     }
   );
   if (!res.ok) {

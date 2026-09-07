@@ -120,7 +120,22 @@ async function handler(req: Request): Promise<Response> {
   try {
     qVec = await embedText(question);
   } catch (e) {
-    return json({ error: "Embedding service unavailable: " + (e as Error).message }, 500);
+    const msg = (e as Error).message ?? "";
+    if (/429|rate|limit/i.test(msg) || (e as Error & { name?: string }).name === "TimeoutError") {
+      return json(
+        {
+          code: "quota_exceeded",
+          error:
+            "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
+          resetAt: Date.now() + 2 * 60 * 60 * 1000,
+        },
+        429
+      );
+    }
+    return json(
+      { error: "I'm having trouble connecting to the model right now. Please try again in a moment." },
+      500
+    );
   }
 
   // 2) Vector search the knowledge base
@@ -173,18 +188,35 @@ async function handler(req: Request): Promise<Response> {
       try {
         send({ type: "sources", sources });
 
-        const gRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents,
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: { temperature: 0.7, maxOutputTokens: MAX_OUTPUT_TOKENS },
-            }),
-          }
-        );
+        // Wait up to 12s for the first Gemini bytes; if the provider hangs,
+        // fail fast with a friendly message instead of making the client wait 35s.
+        const gCtrl = new AbortController();
+        const gWait = setTimeout(() => gCtrl.abort(), 12000);
+        let gRes: Response;
+        try {
+          gRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents,
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: { temperature: 0.7, maxOutputTokens: MAX_OUTPUT_TOKENS },
+              }),
+              signal: gCtrl.signal,
+            }
+          );
+        } catch (err) {
+          clearTimeout(gWait);
+          send({
+            type: "error",
+            error: "I'm a bit busy right now. Please try again in a moment.",
+          });
+          controller.close();
+          return;
+        }
+        clearTimeout(gWait);
 
         if (!gRes.ok || !gRes.body) {
           if (gRes.status === 429) {
