@@ -272,6 +272,8 @@ export default function Dashboard() {
                 <input
                   type="email"
                   autoComplete="off"
+                  name="new-email"
+                  id="new-user-email"
                   value={addUserForm.email}
                   onChange={(e) => setAddUserForm(prev => ({ ...prev, email: e.target.value }))}
                   placeholder="user@example.com"
@@ -283,6 +285,7 @@ export default function Dashboard() {
                     fontSize: 13,
                     background: A.bg,
                     color: A.text,
+                    colorScheme: theme === 'dark' ? 'dark' : 'light',
                   }}
                   required
                 />
@@ -292,6 +295,8 @@ export default function Dashboard() {
                 <input
                   type="password"
                   autoComplete="new-password"
+                  name="new-password"
+                  id="new-user-password"
                   value={addUserForm.password}
                   onChange={(e) => setAddUserForm(prev => ({ ...prev, password: e.target.value }))}
                   placeholder="••••••••"
@@ -303,6 +308,7 @@ export default function Dashboard() {
                     fontSize: 13,
                     background: A.bg,
                     color: A.text,
+                    colorScheme: theme === 'dark' ? 'dark' : 'light',
                   }}
                   required
                 />
