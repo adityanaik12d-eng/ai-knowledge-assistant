@@ -51,11 +51,14 @@ function buildSystemPrompt(): string {
 const encoder = new TextEncoder();
 
 // Provider-side rate limiting: once Gemini reports 429, remember it for the
-// next 2 hours (Deno.Kv, with in-memory fallback) so subsequent requests fail
+// next 5 minutes (Deno.Kv, with in-memory fallback) so subsequent requests fail
 // fast with the friendly limit message instead of re-calling a hanging Gemini.
+// 5 minutes is generous enough for minute-level rate limits to reset while
+// avoiding a long global lockout on intermittent 429s.
 const KV_KEY = ["gemini_limit_until"];
 let kv: Deno.Kv | null = null;
 let memLimitUntil = 0;
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 async function getLimitUntil(): Promise<number> {
   try {
@@ -112,8 +115,11 @@ async function handler(req: Request): Promise<Response> {
       if (role === "free") {
         // If the Gemini provider was recently rate-limited (429 seen), answer
         // immediately with the friendly limit message instead of re-calling it.
+        // Only honor cooldowns within our expected window (< 10 min remaining);
+        // stale long cooldowns from earlier code versions are ignored.
         const limitUntil = await getLimitUntil();
-        if (Date.now() < limitUntil) {
+        const remaining = limitUntil - Date.now();
+        if (remaining > 0 && remaining <= 10 * 60 * 1000) {
           return json(
             {
               code: "quota_exceeded",
@@ -172,7 +178,7 @@ async function handler(req: Request): Promise<Response> {
   } catch (e) {
     const msg = (e as Error).message ?? "";
     if (/Embedding failed \(429\)/.test(msg)) {
-      const untilMs = Date.now() + 2 * 60 * 60 * 1000;
+      const untilMs = Date.now() + COOLDOWN_MS;
       await persistLimitUntil(untilMs);
       return json(
         {
@@ -280,12 +286,12 @@ async function handler(req: Request): Promise<Response> {
 
 if (!gRes.ok || !gRes.body) {
           if (gRes.status === 429) {
-            const untilMs = Date.now() + 2 * 60 * 60 * 1000;
+            const untilMs = Date.now() + COOLDOWN_MS;
             await persistLimitUntil(untilMs);
             send({
               type: "error",
               error:
-                "You've reached your answer limit for now. Please try again in about 2 hours, or upgrade to Premium for unlimited access.",
+                "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
               resetAt: untilMs,
             });
             controller.close();
@@ -322,12 +328,12 @@ if (!gRes.ok || !gRes.body) {
             }
             // Gemini can also 429 mid-stream (SSE error payload).
             if (evt?.error && (/429/.test(String(evt.error.code ?? "")) || /QUOTA|rate|limit/i.test(String(evt.error.message ?? "")))) {
-              const untilMs = Date.now() + 2 * 60 * 60 * 1000;
+              const untilMs = Date.now() + COOLDOWN_MS;
               await persistLimitUntil(untilMs);
               send({
                 type: "error",
                 error:
-                  "You've reached your answer limit for now. Please try again in about 2 hours, or upgrade to Premium for unlimited access.",
+                  "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
                 resetAt: untilMs,
               });
               controller.close();
