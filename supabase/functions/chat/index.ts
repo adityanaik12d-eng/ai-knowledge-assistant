@@ -122,12 +122,9 @@ async function handler(req: Request): Promise<Response> {
         if (remaining > 0 && remaining <= 10 * 60 * 1000) {
           return json(
             {
-              code: "quota_exceeded",
-              error:
-                "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
-              resetAt: limitUntil,
+              error: "The AI service is temporarily at capacity. Please try again in a moment.",
             },
-            429
+            503
           );
         }
         // Free users get FREE_LIMIT questions per 2-hour window.
@@ -181,13 +178,8 @@ async function handler(req: Request): Promise<Response> {
       const untilMs = Date.now() + COOLDOWN_MS;
       await persistLimitUntil(untilMs);
       return json(
-        {
-          code: "quota_exceeded",
-          error:
-            "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
-          resetAt: untilMs,
-        },
-        429
+        { error: "The AI service is temporarily at capacity. Please try again in a moment." },
+        503
       );
     }
     if ((e as Error & { name?: string }).name === "TimeoutError") {
@@ -290,9 +282,7 @@ if (!gRes.ok || !gRes.body) {
             await persistLimitUntil(untilMs);
             send({
               type: "error",
-              error:
-                "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
-              resetAt: untilMs,
+              error: "The AI service is temporarily at capacity. Please try again in a moment.",
             });
             controller.close();
             return;
@@ -332,9 +322,7 @@ if (!gRes.ok || !gRes.body) {
               await persistLimitUntil(untilMs);
               send({
                 type: "error",
-                error:
-                  "You've reached your answer limit for now. Please try again in a bit, or upgrade to Premium for unlimited access.",
-                resetAt: untilMs,
+                error: "The AI service is temporarily at capacity. Please try again in a moment.",
               });
               controller.close();
               return;
