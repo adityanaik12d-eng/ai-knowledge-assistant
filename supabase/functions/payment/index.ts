@@ -84,7 +84,7 @@ function planFromOrderId(orderId: string): string | null {
   return plan && plan in PLANS ? plan : null;
 }
 
-async function createOrder(userId: string, email: string, fullName: string, planKey: string) {
+async function createOrder(userId: string, email: string, fullName: string, planKey: string, phone: string) {
   const plan = PLANS[planKey];
   const orderId = `ord_${planKey}_${userId.slice(0, 8)}_${Date.now()}`;
 
@@ -96,6 +96,7 @@ async function createOrder(userId: string, email: string, fullName: string, plan
       customer_id: userId,
       customer_email: email,
       customer_name: fullName || email,
+      customer_phone: phone,
     },
     order_meta: {
       return_url: `${APP_URL}/chat`,
@@ -267,7 +268,11 @@ Deno.serve(async (req: Request) => {
       case "create_order": {
         const plan = body?.plan ?? "monthly";
         if (!(plan in PLANS)) return json({ error: `Unknown plan: ${plan}` }, 400);
-        const order = await createOrder(userId, email, fullName, plan);
+        const phone = String(body?.phone ?? "").replace(/\D/g, "");
+        if (!/^[6-9]\d{9}$/.test(phone)) {
+          return json({ error: "Please enter a valid 10-digit mobile number." }, 400);
+        }
+        const order = await createOrder(userId, email, fullName, plan, phone);
         return json(order);
       }
       case "check_status":

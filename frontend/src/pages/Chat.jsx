@@ -156,6 +156,7 @@ export default function Chat() {
   const [upgradePlan, setUpgradePlan] = useState('monthly');
   const [upgradeBusy, setUpgradeBusy] = useState(false);
   const [upgradeError, setUpgradeError] = useState('');
+  const [upgradePhone, setUpgradePhone] = useState('');
   const speechSupported = ('webkitSpeechRecognition' in window) || ('SpeechRecognition' in window);
   const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
   const [messages, setMessages] = useState([]);
@@ -1040,7 +1041,7 @@ export default function Chat() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ action: 'create_order', plan: upgradePlan }),
+          body: JSON.stringify({ action: 'create_order', plan: upgradePlan, phone: upgradePhone }),
         }
       );
       const data = await res.json();
@@ -2150,6 +2151,24 @@ export default function Chat() {
               ))}
             </div>
 
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 12, color: A.muted, marginBottom: 6 }}>
+                Mobile number (for payment receipt) *
+              </div>
+              <input
+                type="tel"
+                value={upgradePhone}
+                onChange={(e) => setUpgradePhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="10-digit mobile number"
+                inputMode="numeric"
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 10,
+                  border: `1px solid ${A.border}`, background: A.bg, color: A.text, fontSize: 14,
+                  outline: 'none',
+                }}
+              />
+            </div>
+
             {upgradeError && (
               <div style={{
                 marginTop: 14, fontSize: 12.5, color: A.warning,
@@ -2163,7 +2182,7 @@ export default function Chat() {
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
               <button
                 onClick={handleUpgrade}
-                disabled={upgradeBusy}
+                disabled={upgradeBusy || upgradePhone.replace(/\D/g, '').length !== 10}
                 style={{
                   flex: 1, background: A.primary, color: '#fff', border: 'none', borderRadius: 10,
                   padding: '12px', fontSize: 14, fontWeight: 700, cursor: upgradeBusy ? 'default' : 'pointer',
