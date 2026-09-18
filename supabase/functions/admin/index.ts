@@ -349,6 +349,26 @@ async function deleteDocument(body: Record<string, unknown>): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+async function revokePremium(
+  body: Record<string, unknown>,
+  callerId: string,
+  callerIsOwner: boolean
+): Promise<void> {
+  const userId = String(body?.userId ?? "");
+  if (!userId) throw new ClientError("userId is required");
+  if (userId === callerId) throw new ClientError("You cannot revoke your own plan");
+  const target = (await loadTargetProfiles([userId])).get(userId);
+  if (!target) throw new ClientError("User not found");
+  if (target.role === "admin" || target.is_owner) {
+    throw new ClientError("Cannot revoke an admin account");
+  }
+  const { error } = await supabase
+    .from("profiles")
+    .update({ role: "free", subscription_status: "refunded", premium_expires_at: null })
+    .eq("id", userId);
+  if (error) throw new Error(error.message);
+}
+
 async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -394,6 +414,9 @@ async function handler(req: Request): Promise<Response> {
         return json({ ok: true, deleted: await bulkDeleteUsers(body, auth.callerId, auth.callerIsOwner) });
       case "delete_document":
         await deleteDocument(body);
+        return json({ ok: true });
+      case "revoke_premium":
+        await revokePremium(body, auth.callerId, auth.callerIsOwner);
         return json({ ok: true });
       default:
         return json({ error: `Unknown action: ${action}` }, 400);

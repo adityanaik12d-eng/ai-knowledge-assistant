@@ -171,6 +171,19 @@ export default function Dashboard() {
     }
   };
 
+  const handleRefund = async (userId) => {
+    const ok = window.confirm(
+      'Refund processing? Note: actual money refund Cashfree Dashboard (Payment Gateway → Orders) me mann se karna hoga. Ye action user ko premium se free kar dega aur plan expire kar dega.'
+    );
+    if (!ok) return;
+    try {
+      await callAdminFunction('revoke_premium', { userId });
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: 'free', subscription_status: 'refunded', premium_expires_at: null } : u));
+    } catch (err) {
+      setError(err.message || 'Failed to revoke premium');
+    }
+  };
+
   const handleBulkUpdateUsers = async (updates) => {
     const userIds = Array.from(selectedUserIds);
     if (userIds.length === 0) return;
@@ -630,7 +643,7 @@ export default function Dashboard() {
                         </div>
                       ) : (
                         <span style={{ fontSize: 11, color: A.muted }}>
-                          {user.subscription_status === 'created' ? '⏳ Pending' : user.subscription_status === 'none' || !user.subscription_status ? '—' : user.subscription_status}
+                          {user.subscription_status === 'created' ? '⏳ Pending' : user.subscription_status === 'refunded' ? '↩ Refunded' : user.subscription_status === 'none' || !user.subscription_status ? '—' : user.subscription_status}
                         </span>
                       )}
                     </td>
@@ -669,6 +682,23 @@ export default function Dashboard() {
                           >
                             Reset PW
                           </button>
+                          {(user.subscription_status === 'active' || user.subscription_status === 'created') && (
+                            <button
+                              onClick={() => handleRefund(user.id)}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: 4,
+                                border: `1px solid ${A.warning}`,
+                                background: A.surface,
+                                color: A.warning,
+                                fontSize: 12,
+                                fontWeight: 500,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Refund
+                            </button>
+                          )}
                           <button
                             onClick={() => setDeleteUserConfirm(user.id)}
                             style={{
