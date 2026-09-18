@@ -11,5 +11,5 @@ export const BRAND = {
   appTitle: 'AI Knowledge Assistant',
   tagline: 'Ask anything — code, IT concepts, troubleshooting, or your team\u2019s internal docs.',
   helpdeskLabel: 'IT Helpdesk',
-  helpdeskEmail: '', // e.g. 'support@yourcompany.com' — empty = hidden
+  helpdeskEmail: 'adityanaik12d@gmail.com', // e.g. 'support@yourcompany.com' — empty = hidden
 };

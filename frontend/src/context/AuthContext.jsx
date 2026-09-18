@@ -6,16 +6,18 @@ const AuthContext = createContext(undefined);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
+  const [premiumExpiresAt, setPremiumExpiresAt] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (userId) => {
-    if (!userId) { setRole(null); return; }
+    if (!userId) { setRole(null); setPremiumExpiresAt(null); return; }
     const { data } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, premium_expires_at')
       .eq('id', userId)
       .single();
     setRole(data?.role ?? 'free');
+    setPremiumExpiresAt(data?.premium_expires_at ?? null);
   };
 
   const refreshProfile = async () => {
@@ -60,7 +62,7 @@ export function AuthProvider({ children }) {
     supabase.auth.updateUser({ password: newPassword });
 
   const value = {
-    user, role, loading,
+    user, role, loading, premiumExpiresAt,
     signIn, signUp, signOut, resetPassword, updatePassword,
     refreshProfile,
     isAdmin: role === 'admin',

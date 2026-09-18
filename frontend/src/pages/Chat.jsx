@@ -156,7 +156,7 @@ const Markdown = React.memo(function Markdown({ children, activeColor }) {
 
 export default function Chat() {
   const { theme, toggleTheme } = useTheme();
-  const { role, refreshProfile } = useAuth();
+  const { role, refreshProfile, user, premiumExpiresAt } = useAuth();
   const location = useLocation();
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [upgradePlan, setUpgradePlan] = useState('monthly');
@@ -1616,13 +1616,17 @@ export default function Chat() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {role === 'premium' ? (
-              <span title="Premium member — unlimited answers" style={{
-                fontSize: viewportWidth < 640 ? 10 : 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
-                background: A.successBg, color: A.success, border: `1px solid ${A.success}`,
-                whiteSpace: 'nowrap',
-              }}>
+              <button
+                onClick={() => { setUpgradeError(''); setShowUpgrade(true); }}
+                title="Premium member — manage / request refund"
+                style={{
+                  fontSize: viewportWidth < 640 ? 10 : 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
+                  background: A.successBg, color: A.success, border: `1px solid ${A.success}`,
+                  whiteSpace: 'nowrap', cursor: 'pointer',
+                }}
+              >
                 ★ PREMIUM
-              </span>
+              </button>
             ) : role !== 'admin' ? (
               <button
                 onClick={() => { setUpgradePlan('monthly'); setUpgradeError(''); setShowUpgrade(true); }}
@@ -2118,11 +2122,50 @@ export default function Chat() {
             boxShadow: '0 12px 40px rgba(0,0,0,0.3)', zIndex: 2101, padding: '24px',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: A.text }}>⭐ Upgrade to Premium</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: A.text }}>
+                {role === 'premium' ? '★ Premium Plan' : '⭐ Upgrade to Premium'}
+              </div>
               <button onClick={() => setShowUpgrade(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: A.muted, fontSize: 20, lineHeight: 1 }}>
                 ✕
               </button>
             </div>
+
+            {role === 'premium' ? (
+              <div>
+                <div style={{ fontSize: 13, color: A.muted, marginBottom: 16 }}>
+                  Aap <b style={{ color: A.text }}>Premium</b> member ho.{' '}
+                  {premiumExpiresAt && (
+                    <>
+                      Plan active till <b style={{ color: A.success }}>{new Date(premiumExpiresAt).toLocaleDateString()}</b>.
+                    </>
+                  )}
+                </div>
+                <div style={{
+                  background: A.bg, border: `1px solid ${A.border}`, borderRadius: 12, padding: '16px',
+                  display: 'flex', flexDirection: 'column', gap: 12,
+                }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: A.text }}>Need a refund?</div>
+                  <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.55 }}>
+                    <b style={{ color: A.text }}>7-day money-back guarantee</b> — purchase ke 7 din andar full refund.<br />
+                    7 din ke baad no refund. Processed within 5–7 working days after approval.
+                  </div>
+                  <a
+                    href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund.\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
+                    style={{
+                      textAlign: 'center', background: A.warning, color: '#fff', borderRadius: 10,
+                      padding: '11px', fontSize: 13.5, fontWeight: 700, textDecoration: 'none',
+                    }}
+                  >
+                    ↺ Request Refund
+                  </a>
+                  <div style={{ fontSize: 11, color: A.muted, textAlign: 'center' }}>
+                    Email khulega — message ready-bana hua rahega. Bas bhej dena.
+                  </div>
+                </div>
+              </div>
+            ) : (
+            <>
+
             <div style={{ fontSize: 13, color: A.muted, marginBottom: 18 }}>
               {BRAND.name} ke saath <b style={{ color: A.text }}>unlimited answers</b>, priority AI access aur no daily limits. Choose a plan below:
             </div>
@@ -2219,8 +2262,10 @@ export default function Chat() {
               </button>
             </div>
             <div style={{ fontSize: 11, color: A.muted, marginTop: 12, textAlign: 'center' }}>
-              100% secure payments via Cashfree. UPI, cards & netbanking supported.
+              100% secure payments via Cashfree. 7-day money-back guarantee.
             </div>
+            </>
+            )}
           </div>
         </>
       )}
