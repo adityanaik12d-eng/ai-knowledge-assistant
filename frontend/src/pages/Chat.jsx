@@ -54,6 +54,24 @@ const DARK_COLORS = {
 const MAX_HISTORY_TURNS = 40;
 const MAX_FILE_SIZE_MB = 8;
 
+const loadCashfreeSdk = () => new Promise((resolve, reject) => {
+  if (typeof window === 'undefined') return reject(new Error('No window'));
+  if (window.Cashfree) return resolve(window.Cashfree);
+  const existing = document.querySelector('script[data-cashfree-sdk]');
+  if (existing) {
+    existing.addEventListener('load', () => resolve(window.Cashfree));
+    existing.addEventListener('error', () => reject(new Error('Could not load payment SDK.')));
+    return;
+  }
+  const s = document.createElement('script');
+  s.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+  s.async = true;
+  s.setAttribute('data-cashfree-sdk', '1');
+  s.onload = () => resolve(window.Cashfree);
+  s.onerror = () => reject(new Error('Could not load payment SDK.'));
+  document.head.appendChild(s);
+});
+
 const getSourceText = (s) => {
   const raw = s?.text || s?.chunk || s?.content || s?.excerpt || s?.snippet || '';
   return raw
@@ -1022,17 +1040,18 @@ export default function Chat() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ action: 'create_subscription', plan: upgradePlan }),
+          body: JSON.stringify({ action: 'create_order', plan: upgradePlan }),
         }
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not start checkout.');
-      if (data.short_url) {
-        window.open(data.short_url, '_blank', 'noopener');
-        setUpgradeError('Payment page opened in a new tab. Complete the payment there, then click “I’ve Paid” here.');
-        return;
-      }
-      throw new Error('No checkout link returned.');
+      if (!data.payment_session_id) throw new Error('No checkout session returned.');
+
+      const Cashfree = await loadCashfreeSdk();
+      if (!Cashfree) throw new Error('Payment SDK unavailable.');
+      const cf = Cashfree({ mode: data.mode === 'production' ? 'production' : 'sandbox' });
+      await cf.checkout({ paymentSessionId: data.payment_session_id, redirectTarget: '_modal' });
+      setUpgradeError('Complete the payment in the checkout window, then click “I’ve Paid” below.');
     } catch (e) {
       setUpgradeError(e.message || 'Something went wrong.');
     } finally {
@@ -1059,13 +1078,8 @@ export default function Chat() {
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not check payment status.');
-      if (data.role === 'premium') {
-        await refreshProfile();
-        setShowUpgrade(false);
-        return;
-      }
-      if (data.subscription_status === 'active') {
-        setUpgradeError('Payment confirmed! Refreshing your plan…');
+      if (data.role === 'premium' || data.subscription_active) {
+        setUpgradeError('Payment confirmed! Premium activated ✓');
         await refreshProfile();
         setTimeout(() => setShowUpgrade(false), 1200);
         return;
@@ -2156,7 +2170,7 @@ export default function Chat() {
                   opacity: upgradeBusy ? 0.6 : 1,
                 }}
               >
-                {upgradeBusy ? 'Processing…' : 'Pay with Razorpay'}
+                {upgradeBusy ? 'Processing…' : 'Pay Securely'}
               </button>
               <button
                 onClick={handleCheckStatus}
@@ -2171,7 +2185,7 @@ export default function Chat() {
               </button>
             </div>
             <div style={{ fontSize: 11, color: A.muted, marginTop: 12, textAlign: 'center' }}>
-              100% secure payments via Razorpay. Cancel anytime from your dashboard.
+              100% secure payments via Cashfree. UPI, cards & netbanking supported.
             </div>
           </div>
         </>
