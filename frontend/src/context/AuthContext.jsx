@@ -18,6 +18,12 @@ export function AuthProvider({ children }) {
     setRole(data?.role ?? 'free');
   };
 
+  const refreshProfile = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await loadProfile(user.id);
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
       const currentUser = data.session?.user ?? null;
@@ -56,6 +62,7 @@ export function AuthProvider({ children }) {
   const value = {
     user, role, loading,
     signIn, signUp, signOut, resetPassword, updatePassword,
+    refreshProfile,
     isAdmin: role === 'admin',
   };
 

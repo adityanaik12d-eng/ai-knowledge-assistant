@@ -133,7 +133,7 @@ export default function Dashboard() {
       setError(err.message || 'Failed to update user');
       const { data } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role, suspended, is_owner, created_at, password')
+        .select('id, email, full_name, role, suspended, is_owner, created_at, password, subscription_status, premium_expires_at')
         .order('created_at', { ascending: false });
       if (data) setUsers(data);
     }
@@ -546,6 +546,7 @@ export default function Dashboard() {
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Password</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Full Name</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Role</th>
+                <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Subscription</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Suspended</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Created</th>
                 <th style={{ textAlign: 'left', padding: '12px', fontSize: 14, fontWeight: 600, color: A.text }}>Last Sign In</th>
@@ -618,6 +619,20 @@ export default function Dashboard() {
                         <option value="premium">Premium user</option>
                         <option value="admin">Admin</option>
                       </select>
+                    </td>
+                    <td style={{ padding: '12px', verticalAlign: 'middle' }}>
+                      {user.subscription_status === 'active' ? (
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: A.success }}>★ Active</div>
+                          {user.premium_expires_at && (
+                            <div style={{ fontSize: 10.5, color: A.muted }}>till {formatDate(user.premium_expires_at)}</div>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 11, color: A.muted }}>
+                          {user.subscription_status === 'created' ? '⏳ Pending' : user.subscription_status === 'none' || !user.subscription_status ? '—' : user.subscription_status}
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: '12px', verticalAlign: 'middle' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: user.id === currentUserId ? 'default' : 'pointer' }}>
@@ -713,7 +728,7 @@ export default function Dashboard() {
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: A.muted }}>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: A.muted }}>
                     No users found
                   </td>
                 </tr>

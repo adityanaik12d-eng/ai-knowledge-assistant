@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { supabase } from '../lib/supabase.js';
 import { useTheme } from '../context/ThemeContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { BRAND } from '../config/brand.js';
 
 const COLORS = {
@@ -131,6 +132,12 @@ const Markdown = React.memo(function Markdown({ children, activeColor }) {
 
 export default function Chat() {
   const { theme, toggleTheme } = useTheme();
+  const { role, refreshProfile } = useAuth();
+  const location = useLocation();
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [upgradePlan, setUpgradePlan] = useState('monthly');
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
+  const [upgradeError, setUpgradeError] = useState('');
   const speechSupported = ('webkitSpeechRecognition' in window) || ('SpeechRecognition' in window);
   const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
   const [messages, setMessages] = useState([]);
@@ -177,6 +184,15 @@ export default function Chat() {
   const forceScrollToBottomRef = useRef(false);
 
   const A = theme === 'dark' ? DARK_COLORS : COLORS;
+
+  useEffect(() => {
+    if (location.state?.openUpgrade) {
+      setUpgradePlan('monthly');
+      setUpgradeError('');
+      setShowUpgrade(true);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -992,6 +1008,76 @@ export default function Chat() {
     .slice()
     .sort((a, b) => (pinnedIds.includes(b.id) ? 1 : 0) - (pinnedIds.includes(a.id) ? 1 : 0));
 
+  const handleUpgrade = async () => {
+    setUpgradeBusy(true);
+    setUpgradeError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Please sign in again.');
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/payment`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ action: 'create_subscription', plan: upgradePlan }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not start checkout.');
+      if (data.short_url) {
+        window.open(data.short_url, '_blank', 'noopener');
+        setUpgradeError('Payment page opened in a new tab. Complete the payment there, then click “I’ve Paid” here.');
+        return;
+      }
+      throw new Error('No checkout link returned.');
+    } catch (e) {
+      setUpgradeError(e.message || 'Something went wrong.');
+    } finally {
+      setUpgradeBusy(false);
+    }
+  };
+
+  const handleCheckStatus = async () => {
+    setUpgradeBusy(true);
+    setUpgradeError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Please sign in again.');
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/payment`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ action: 'check_status' }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not check payment status.');
+      if (data.role === 'premium') {
+        await refreshProfile();
+        setShowUpgrade(false);
+        return;
+      }
+      if (data.subscription_status === 'active') {
+        setUpgradeError('Payment confirmed! Refreshing your plan…');
+        await refreshProfile();
+        setTimeout(() => setShowUpgrade(false), 1200);
+        return;
+      }
+      setUpgradeError('Payment not detected yet. If you just paid, wait a few seconds and try again.');
+    } catch (e) {
+      setUpgradeError(e.message || 'Something went wrong.');
+    } finally {
+      setUpgradeBusy(false);
+    }
+  };
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -1499,6 +1585,25 @@ export default function Chat() {
             {BRAND.name}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {role === 'premium' ? (
+              <span title="Premium member — unlimited answers" style={{
+                fontSize: viewportWidth < 640 ? 10 : 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
+                background: A.successBg, color: A.success, border: `1px solid ${A.success}`,
+                whiteSpace: 'nowrap',
+              }}>
+                ★ PREMIUM
+              </span>
+            ) : role !== 'admin' ? (
+              <button
+                onClick={() => { setUpgradePlan('monthly'); setUpgradeError(''); setShowUpgrade(true); }}
+                style={{
+                  fontSize: viewportWidth < 640 ? 10 : 11, fontWeight: 700, padding: '4px 12px', borderRadius: 12,
+                  background: A.primary, color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                ⭐ Upgrade
+              </button>
+            ) : null}
             <Link to="/" style={{ fontSize: viewportWidth < 640 ? 10.5 : 12.5, color: A.primary, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
               ← Back to Home
             </Link>
@@ -1733,6 +1838,20 @@ export default function Chat() {
                     overflowWrap: 'break-word', wordBreak: 'break-word',
                   }}>
                     {m.text}
+                    {/premium|limit|upgrade/i.test(m.text) && role !== 'premium' && role !== 'admin' && (
+                      <div style={{ marginTop: 10 }}>
+                        <button
+                          onClick={() => { setUpgradePlan('monthly'); setUpgradeError(''); setShowUpgrade(true); }}
+                          style={{
+                            background: A.primary, color: '#fff', border: 'none', borderRadius: 8,
+                            padding: '7px 16px', fontSize: viewportWidth < 640 ? 11 : 12.5, fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          ⭐ Upgrade to Premium — Unlimited Answers
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1948,6 +2067,111 @@ export default function Chat() {
                   This source does not include a text preview. It was used as a reference for the answer.
                 </div>
               )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {showUpgrade && (
+        <>
+          <div
+            onClick={() => setShowUpgrade(false)}
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.5)', zIndex: 2100,
+            }}
+          />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+            width: 'min(560px, 94vw)', maxHeight: '88vh', overflowY: 'auto',
+            background: A.surface, border: `1px solid ${A.border}`, borderRadius: 16,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.3)', zIndex: 2101, padding: '24px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: A.text }}>⭐ Upgrade to Premium</div>
+              <button onClick={() => setShowUpgrade(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: A.muted, fontSize: 20, lineHeight: 1 }}>
+                ✕
+              </button>
+            </div>
+            <div style={{ fontSize: 13, color: A.muted, marginBottom: 18 }}>
+              {BRAND.name} ke saath <b style={{ color: A.text }}>unlimited answers</b>, priority AI access aur no daily limits. Choose a plan below:
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                { key: 'monthly', name: 'Monthly', price: '₹499', per: '/month', tag: null, desc: 'Billed monthly. Cancel anytime.' },
+                { key: 'quarterly', name: 'Quarterly', price: '₹1,299', per: '/3 months', tag: '≈ ₹433/month', desc: 'Best value. Billed every 3 months.' },
+                { key: 'yearly', name: 'Yearly', price: '₹3,999', per: '/year', tag: '≈ ₹333/month · 33% off', desc: 'Most popular. Billed once a year.' },
+              ].map((p) => (
+                <div key={p.key} onClick={() => setUpgradePlan(p.key)} style={{
+                  border: `2px solid ${upgradePlan === p.key ? A.primary : A.border}`,
+                  background: upgradePlan === p.key ? A.activeItemBg : A.surface,
+                  borderRadius: 12, padding: '14px 16px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 14,
+                }}>
+                  <input
+                    type="radio"
+                    name="plan"
+                    checked={upgradePlan === p.key}
+                    onChange={() => setUpgradePlan(p.key)}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ accentColor: A.primary, flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 700, color: A.text }}>
+                      {p.name} {p.price}
+                      <span style={{ color: A.muted, fontWeight: 500, fontSize: 12 }}> {p.per}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: A.muted, marginTop: 2 }}>{p.desc}</div>
+                  </div>
+                  {p.tag && (
+                    <div style={{
+                      fontSize: 10.5, fontWeight: 700, padding: '3px 8px', borderRadius: 10,
+                      background: A.successBg, color: A.success, whiteSpace: 'nowrap',
+                    }}>
+                      {p.tag}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {upgradeError && (
+              <div style={{
+                marginTop: 14, fontSize: 12.5, color: A.warning,
+                background: A.warningBg, border: `1px solid ${A.warningBorder}`,
+                padding: '10px 12px', borderRadius: 8,
+              }}>
+                {upgradeError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button
+                onClick={handleUpgrade}
+                disabled={upgradeBusy}
+                style={{
+                  flex: 1, background: A.primary, color: '#fff', border: 'none', borderRadius: 10,
+                  padding: '12px', fontSize: 14, fontWeight: 700, cursor: upgradeBusy ? 'default' : 'pointer',
+                  opacity: upgradeBusy ? 0.6 : 1,
+                }}
+              >
+                {upgradeBusy ? 'Processing…' : 'Pay with Razorpay'}
+              </button>
+              <button
+                onClick={handleCheckStatus}
+                disabled={upgradeBusy}
+                style={{
+                  flex: 1, background: 'none', border: `1px solid ${A.primary}`, borderRadius: 10,
+                  padding: '12px', fontSize: 14, fontWeight: 600, color: A.primary,
+                  cursor: upgradeBusy ? 'default' : 'pointer', opacity: upgradeBusy ? 0.6 : 1,
+                }}
+              >
+                I’ve Paid — Check Status
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: A.muted, marginTop: 12, textAlign: 'center' }}>
+              100% secure payments via Razorpay. Cancel anytime from your dashboard.
             </div>
           </div>
         </>

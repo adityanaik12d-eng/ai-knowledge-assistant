@@ -6,7 +6,7 @@ import { LIGHT_COLORS, DARK_COLORS } from '../context/themeColors.js';
 import { BRAND } from '../config/brand.js';
 
 export default function Home() {
-  const { user, signOut, isAdmin } = useAuth();
+  const { user, role, signOut, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const A = theme === 'dark' ? DARK_COLORS : LIGHT_COLORS;
   return (
@@ -96,6 +96,35 @@ export default function Home() {
             </Link>
           )}
         </div>
+        {role !== 'premium' && role !== 'admin' && (
+          <div style={{
+            marginTop: 40, maxWidth: 560, width: '100%', background: A.surface,
+            border: `1px solid ${A.border}`, borderRadius: 14, padding: '22px 26px', textAlign: 'left',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: A.heading }}>⭐ Premium</div>
+                <div style={{ fontSize: 12.5, color: A.muted, marginTop: 3 }}>
+                  Unlimited answers · Priority AI access · No daily limits
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: A.heading }}>₹499<span style={{ fontSize: 12, fontWeight: 500, color: A.muted }}>/mo</span></div>
+                <div style={{ fontSize: 11, color: A.muted }}>quarterly & yearly discounts</div>
+              </div>
+            </div>
+            <Link
+              to="/chat"
+              state={{ openUpgrade: true }}
+              style={{
+                display: 'inline-block', marginTop: 14, padding: '9px 20px', borderRadius: 8,
+                background: A.primary, color: '#fff', fontSize: 13.5, fontWeight: 700, textDecoration: 'none',
+              }}
+            >
+              Upgrade to Premium →
+            </Link>
+          </div>
+        )}
         {BRAND.helpdeskEmail && (
           <div style={{
             marginTop: 34,
