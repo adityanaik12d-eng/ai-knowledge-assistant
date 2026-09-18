@@ -72,6 +72,12 @@ const loadCashfreeSdk = () => new Promise((resolve, reject) => {
   document.head.appendChild(s);
 });
 
+const clearCashfreeModal = () => {
+  if (typeof document === 'undefined') return;
+  document.querySelectorAll('iframe[src*="cashfree"]').forEach((el) => el.remove());
+  document.querySelectorAll('[id*="cf-checkout"], [id*="cashfree"], [class*="cf-checkout"], [class*="cashfree-modal"], [class*="cashfree__"]').forEach((el) => el.remove());
+};
+
 const getSourceText = (s) => {
   const raw = s?.text || s?.chunk || s?.content || s?.excerpt || s?.snippet || '';
   return raw
@@ -1050,9 +1056,18 @@ export default function Chat() {
 
       const Cashfree = await loadCashfreeSdk();
       if (!Cashfree) throw new Error('Payment SDK unavailable.');
+      clearCashfreeModal();
       const cf = Cashfree({ mode: data.mode === 'production' ? 'production' : 'sandbox' });
-      await cf.checkout({ paymentSessionId: data.payment_session_id, redirectTarget: '_modal' });
-      setUpgradeError('Complete the payment in the checkout window, then click “I’ve Paid” below.');
+      try {
+        await cf.checkout({ paymentSessionId: data.payment_session_id, redirectTarget: '_modal' });
+        setUpgradeError('Complete the payment in the checkout window, then click “I’ve Paid” below.');
+      } catch (checkoutErr) {
+        const msg = checkoutErr && checkoutErr.message ? checkoutErr.message : String(checkoutErr);
+        if (typeof msg === 'string' && msg.includes('session_')) {
+          throw new Error('A payment attempt is already open. Please refresh the page to continue.');
+        }
+        throw checkoutErr;
+      }
     } catch (e) {
       setUpgradeError(e.message || 'Something went wrong.');
     } finally {

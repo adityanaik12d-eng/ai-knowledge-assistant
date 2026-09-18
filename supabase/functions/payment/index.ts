@@ -272,6 +272,27 @@ Deno.serve(async (req: Request) => {
         if (!/^[6-9]\d{9}$/.test(phone)) {
           return json({ error: "Please enter a valid 10-digit mobile number." }, 400);
         }
+        // Reuse an existing ACTIVE (unpaid) order so repeated "Pay Securely"
+        // clicks resume the same checkout instead of stacking sessions.
+        const { data: existing } = await supabase
+          .from("profiles")
+          .select("payment_order_id, subscription_status")
+          .eq("id", userId)
+          .maybeSingle();
+        if (existing?.payment_order_id && existing.subscription_status === "created") {
+          try {
+            const o = await cashfreeFetch(`/orders/${existing.payment_order_id}`);
+            if (o?.order_status === "ACTIVE" && o?.payment_session_id) {
+              return json({
+                order_id: o.order_id,
+                payment_session_id: o.payment_session_id,
+                mode: CASHFREE_ENV === "production" ? "production" : "sandbox",
+              });
+            }
+          } catch {
+            // provider lookup failed — fall through and create a fresh order
+          }
+        }
         const order = await createOrder(userId, email, fullName, plan, phone);
         return json(order);
       }
