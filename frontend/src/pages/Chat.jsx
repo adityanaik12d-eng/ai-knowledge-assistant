@@ -1770,7 +1770,7 @@ export default function Chat() {
                   💳 Premium & Billing
                 </div>
                 <div style={{ fontSize: 12, color: A.muted, marginBottom: 14 }}>
-                  Aapka Premium plan aur payments yahan manage hota hai.
+                  Manage your Premium plan and payments here.
                 </div>
                 {role === 'premium' ? (
                   <>
@@ -1789,9 +1789,9 @@ export default function Chat() {
                       </div>
                     </div>
                     <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.6, marginBottom: 14 }}>
-                      <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — purchase ke 7 din andar full refund.</div>
-                      <div>• 7 din ke baad no refund, aur na hi bacha hua time transfer hoga.</div>
-                      <div>• Approval ke baad 5–7 working days me paisa account me wapas.</div>
+                      <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — full refund within 7 days of purchase.</div>
+                      <div>• No refund after 7 days; unused time is non-transferable.</div>
+                      <div>• Refunds processed within 5–7 working days after approval.</div>
                     </div>
                     <a
                       href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund.\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
@@ -1805,12 +1805,12 @@ export default function Chat() {
                   </>
                 ) : role === 'admin' ? (
                   <div style={{ fontSize: 13, color: A.muted }}>
-                    Admin account — billing nahi hoti. Users/subscriptions ke liye <b style={{ color: A.primary }}>Dashboard</b> open karo.
+                    Admin account — billing is not applicable. Use the <b style={{ color: A.primary }}>Dashboard</b> to manage users and subscriptions.
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ fontSize: 13, color: A.muted }}>
-                      Unlock <b style={{ color: A.text }}>unlimited answers</b> with Premium — ₹499/month se shuru.
+                      Unlock <b style={{ color: A.text }}>unlimited answers</b> with Premium — starting at ₹499/month.
                     </div>
                     <button
                       onClick={() => { setUpgradePlan('monthly'); setUpgradeError(''); setShowUpgrade(true); }}
@@ -1832,7 +1832,7 @@ export default function Chat() {
               <div style={{ background: A.surface, border: `1px solid ${A.border}`, borderRadius: 14, padding: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 800, color: A.text }}>🎨 Appearance</div>
-                  <div style={{ fontSize: 12, color: A.muted, marginTop: 3 }}>Light aur dark theme ke beech switch karo.</div>
+                  <div style={{ fontSize: 12, color: A.muted, marginTop: 3 }}>Switch between light and dark themes.</div>
                 </div>
                 <button
                   onClick={toggleTheme}
@@ -1849,7 +1849,7 @@ export default function Chat() {
               <div style={{ background: A.surface, border: `1px solid ${A.border}`, borderRadius: 14, padding: 18 }}>
                 <div style={{ fontSize: 15, fontWeight: 800, color: A.text, marginBottom: 8 }}>💬 Help & Support</div>
                 <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.7, marginBottom: 12 }}>
-                  Koi sawaal, issue, quota problem ya refund chahiye — system administrator se seedha email karo.
+                  Have a question, facing an issue, or need a refund? Reach out to the system administrator directly.
                 </div>
                 <a
                   href="mailto:adityanaik12d@gmail.com?subject=Support%20—%20AI%20Knowledge%20Assistant"
@@ -2372,9 +2372,9 @@ export default function Chat() {
                 }}>
                   <div style={{ fontSize: 14, fontWeight: 800, color: A.text }}>Need a refund?</div>
                   <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.6 }}>
-                    <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — purchase ke 7 din andar full refund.</div>
-                    <div>• 7 din ke baad no refund, aur na hi bacha hua time transfer hoga.</div>
-                    <div>• Approval ke baad 5–7 working days me paisa account me wapas.</div>
+                    <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — full refund within 7 days of purchase.</div>
+                    <div>• No refund after 7 days; unused time is non-transferable.</div>
+                    <div>• Refunds processed within 5–7 working days after approval.</div>
                   </div>
                   <a
                     href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund.\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
@@ -2386,7 +2386,7 @@ export default function Chat() {
                     ↺ Request Refund
                   </a>
                   <div style={{ fontSize: 11, color: A.muted, textAlign: 'center' }}>
-                    Refund request email bheja jayega — message pahle se ready, bas bhej dena.
+                    A pre-filled refund request email will be generated — just hit send.
                   </div>
                 </div>
               </div>
