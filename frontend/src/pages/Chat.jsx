@@ -1789,12 +1789,12 @@ export default function Chat() {
                       </div>
                     </div>
                     <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.6, marginBottom: 14 }}>
-                      <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — full refund within 7 days of purchase.</div>
+                      <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — full refund of the plan amount within 7 days of purchase; the convenience fee is non-refundable.</div>
                       <div>• No refund after 7 days; unused time is non-transferable.</div>
                       <div>• Refunds are credited to the original payment method within 5–7 working days after approval (UPI usually within 5 days, cards up to 7 days).</div>
                     </div>
                     <a
-                      href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund.\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
+                      href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund of my Premium plan amount (convenience fee excluded).\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
                       style={{
                         display: 'block', textAlign: 'center', background: A.warning, color: '#fff', borderRadius: 10,
                         padding: '12px', fontSize: 14, fontWeight: 700, textDecoration: 'none',
@@ -1810,7 +1810,7 @@ export default function Chat() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ fontSize: 13, color: A.muted }}>
-                      Unlock <b style={{ color: A.text }}>unlimited answers</b> with Premium — starting at ₹499/month.
+                      Unlock <b style={{ color: A.text }}>unlimited answers</b> with Premium — from ₹515 total (incl. convenience fee).
                     </div>
                     <button
                       onClick={() => { setUpgradePlan('monthly'); setUpgradeError(''); setShowUpgrade(true); }}
@@ -2372,12 +2372,12 @@ export default function Chat() {
                 }}>
                   <div style={{ fontSize: 14, fontWeight: 800, color: A.text }}>Need a refund?</div>
                   <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.6 }}>
-                    <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — full refund within 7 days of purchase.</div>
+                    <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — full refund of the plan amount within 7 days of purchase; the convenience fee is non-refundable.</div>
                     <div>• No refund after 7 days; unused time is non-transferable.</div>
                     <div>• Refunds are credited to the original payment method within 5–7 working days after approval (UPI usually within 5 days, cards up to 7 days).</div>
                   </div>
                   <a
-                    href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund.\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
+                    href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund of my Premium plan amount (convenience fee excluded).\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
                     style={{
                       textAlign: 'center', background: A.warning, color: '#fff', borderRadius: 10,
                       padding: '12px', fontSize: 14, fontWeight: 700, textDecoration: 'none',
@@ -2399,9 +2399,9 @@ export default function Chat() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { key: 'monthly', name: 'Monthly', price: '₹499', per: '/month', tag: null, desc: 'Billed monthly. Cancel anytime.' },
-                { key: 'quarterly', name: 'Quarterly', price: '₹1,299', per: '/3 months', tag: '≈ ₹433/month', desc: 'Best value. Billed every 3 months.' },
-                { key: 'yearly', name: 'Yearly', price: '₹3,999', per: '/year', tag: '≈ ₹333/month · 33% off', desc: 'Most popular. Billed once a year.' },
+                { key: 'monthly', name: 'Monthly', price: '₹499', per: '/month', tag: null, desc: 'Billed monthly. Cancel anytime.', fee: 16, total: 515 },
+                { key: 'quarterly', name: 'Quarterly', price: '₹1,299', per: '/3 months', tag: '≈ ₹433/month', desc: 'Best value. Billed every 3 months.', fee: 41, total: 1340 },
+                { key: 'yearly', name: 'Yearly', price: '₹3,999', per: '/year', tag: '≈ ₹333/month · 33% off', desc: 'Most popular. Billed once a year.', fee: 121, total: 4120 },
               ].map((p) => (
                 <div key={p.key} onClick={() => setUpgradePlan(p.key)} style={{
                   border: `2px solid ${upgradePlan === p.key ? A.primary : A.border}`,
@@ -2423,6 +2423,9 @@ export default function Chat() {
                       <span style={{ color: A.muted, fontWeight: 500, fontSize: 12 }}> {p.per}</span>
                     </div>
                     <div style={{ fontSize: 12, color: A.muted, marginTop: 2 }}>{p.desc}</div>
+                    <div style={{ fontSize: 11.5, color: A.muted, marginTop: 4 }}>
+                      Convenience fee: <b style={{ color: A.text }}>₹{p.fee.toLocaleString('en-IN')}</b> · Total payable: <b style={{ color: A.primary }}>₹{p.total.toLocaleString('en-IN')}</b>
+                    </div>
                   </div>
                   {p.tag && (
                     <div style={{
@@ -2489,7 +2492,7 @@ export default function Chat() {
               </button>
             </div>
             <div style={{ fontSize: 11, color: A.muted, marginTop: 12, textAlign: 'center' }}>
-              100% secure payments via Cashfree. 7-day money-back guarantee.
+              100% secure payments via Cashfree. Full plan refund within 7 days (convenience fee non-refundable).
             </div>
             </>
             )}

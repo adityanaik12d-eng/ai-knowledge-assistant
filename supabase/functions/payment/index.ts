@@ -40,11 +40,13 @@ function json(body: unknown, status = 200): Response {
 class ClientError extends Error {}
 class ProviderError extends Error {}
 
-// plan -> { amount (INR rupees), days of premium }
-const PLANS: Record<string, { amount: number; days: number; label: string }> = {
-  monthly: { amount: 499, days: 30, label: "Monthly" },
-  quarterly: { amount: 1299, days: 91, label: "Quarterly" },
-  yearly: { amount: 3999, days: 365, label: "Yearly" },
+// plan -> { amount (base INR), fee (convenience fee INR), days of premium }
+// Checkout charges amount + fee. On refund the customer gets `amount` back;
+// the convenience fee covers the gateway MDR and is non-refundable.
+const PLANS: Record<string, { amount: number; fee: number; days: number; label: string }> = {
+  monthly: { amount: 499, fee: 16, days: 30, label: "Monthly" },
+  quarterly: { amount: 1299, fee: 41, days: 91, label: "Quarterly" },
+  yearly: { amount: 3999, fee: 121, days: 365, label: "Yearly" },
 };
 
 async function cashfreeFetch(path: string, method = "GET", body?: unknown): Promise<any> {
@@ -90,7 +92,7 @@ async function createOrder(userId: string, email: string, fullName: string, plan
 
   const order = await cashfreeFetch("/orders", "POST", {
     order_id: orderId,
-    order_amount: plan.amount,
+    order_amount: plan.amount + plan.fee,
     order_currency: "INR",
     customer_details: {
       customer_id: userId,
