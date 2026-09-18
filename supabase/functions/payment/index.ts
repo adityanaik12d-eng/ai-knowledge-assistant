@@ -183,20 +183,32 @@ async function checkStatus(userId: string) {
   });
 }
 
-async function verifyWebhookSignature(bodyText: string, signature: string | null, timestamp: string | null): Promise<boolean> {
-  if (!signature || !timestamp || !WEBHOOK_SECRET) return false;
+async function hmacB64(secret: string, data: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(WEBHOOK_SECRET),
+    new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(timestamp + bodyText));
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
   const bytes = new Uint8Array(mac);
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary) === signature;
+  return btoa(binary);
+}
+
+async function verifyWebhookSignature(bodyText: string, signature: string | null, timestamp: string | null): Promise<boolean> {
+  if (!signature || !timestamp || !WEBHOOK_SECRET) return false;
+  // Cashfree computes: Base64(HMACSHA256(timestamp + "." + payload, secret))
+  const candidates = [
+    `${timestamp}.${bodyText}`,
+    `${timestamp}${bodyText}`,
+  ];
+  for (const candidate of candidates) {
+    if ((await hmacB64(WEBHOOK_SECRET, candidate)) === signature) return true;
+  }
+  return false;
 }
 
 async function findUserId(event: any): Promise<string | null> {
