@@ -24,6 +24,14 @@ export default function Home() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <span style={{ fontSize: 13, color: A.muted }}>{user?.email}</span>
+          <Link
+            to="/chat"
+            state={{ openSettings: true }}
+            style={{ fontSize: 20, lineHeight: 1, color: A.primary, textDecoration: 'none' }}
+            title="Settings"
+          >
+            ⚙️
+          </Link>
           <button
             onClick={toggleTheme}
             style={{

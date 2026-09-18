@@ -219,6 +219,12 @@ export default function Chat() {
       setUpgradePlan('monthly');
       setUpgradeError('');
       setShowUpgrade(true);
+      setSettingsOpen(false);
+      window.history.replaceState({}, document.title);
+    }
+    if (location.state?.openSettings) {
+      setSettingsOpen(true);
+      setShowUpgrade(false);
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
