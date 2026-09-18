@@ -104,6 +104,24 @@ export default function Home() {
                 🛰 Ops Command Center
               </Link>
               <Link
+                to="/sales"
+                style={{
+                  padding: '10px 20px', borderRadius: 8, background: A.surface, color: A.primary,
+                  border: `1px solid ${A.primary}`, fontSize: 14, fontWeight: 600, textDecoration: 'none',
+                }}
+              >
+                🤝 Sales-Copilot
+              </Link>
+              <Link
+                to="/copilot"
+                style={{
+                  padding: '10px 20px', borderRadius: 8, background: A.surface, color: A.primary,
+                  border: `1px solid ${A.primary}`, fontSize: 14, fontWeight: 600, textDecoration: 'none',
+                }}
+              >
+                🧠 Dev-Copilot
+              </Link>
+              <Link
                 to="/dashboard"
                 style={{
                   padding: '10px 20px', borderRadius: 8, background: A.surface, color: A.primary,

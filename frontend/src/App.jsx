@@ -10,6 +10,8 @@ import Upload from './pages/Upload.jsx';
 import Chat from './pages/Chat.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Ops from './pages/Ops.jsx';
+import Sales from './pages/Sales.jsx';
+import Copilot from './pages/Copilot.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
 import AccessDenied from './pages/AccessDenied.jsx';
 
@@ -59,6 +61,22 @@ export default function App() {
             element={
               <AdminRoute>
                 <Ops />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/sales"
+            element={
+              <AdminRoute>
+                <Sales />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/copilot"
+            element={
+              <AdminRoute>
+                <Copilot />
               </AdminRoute>
             }
           />
