@@ -1791,7 +1791,7 @@ export default function Chat() {
                     <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.6, marginBottom: 14 }}>
                       <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — full refund within 7 days of purchase.</div>
                       <div>• No refund after 7 days; unused time is non-transferable.</div>
-                      <div>• Refunds processed within 5–7 working days after approval.</div>
+                      <div>• Refunds are credited to the original payment method within 5–7 working days after approval (UPI usually within 5 days, cards up to 7 days).</div>
                     </div>
                     <a
                       href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund.\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
@@ -2374,7 +2374,7 @@ export default function Chat() {
                   <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.6 }}>
                     <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — full refund within 7 days of purchase.</div>
                     <div>• No refund after 7 days; unused time is non-transferable.</div>
-                    <div>• Refunds processed within 5–7 working days after approval.</div>
+                    <div>• Refunds are credited to the original payment method within 5–7 working days after approval (UPI usually within 5 days, cards up to 7 days).</div>
                   </div>
                   <a
                     href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund.\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
