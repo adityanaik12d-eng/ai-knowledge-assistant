@@ -108,10 +108,16 @@ async function handler(req: Request): Promise<Response> {
     try {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, premium_expires_at")
         .eq("id", authedUserId)
         .maybeSingle();
-      const role = profile?.role ?? "free";
+      let role = profile?.role ?? "free";
+      // Premium access is time-bound; once the paid period lapses, treat the
+      // user as free again (admins are never downgraded).
+      if (role === "premium" && profile?.premium_expires_at) {
+        const expiry = new Date(profile.premium_expires_at).getTime();
+        if (!Number.isNaN(expiry) && expiry < Date.now()) role = "free";
+      }
       if (role === "free") {
         // If the Gemini provider was recently rate-limited (429 seen), answer
         // immediately with the friendly limit message instead of re-calling it.
