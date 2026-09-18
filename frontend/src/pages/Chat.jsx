@@ -156,8 +156,12 @@ const Markdown = React.memo(function Markdown({ children, activeColor }) {
 
 export default function Chat() {
   const { theme, toggleTheme } = useTheme();
-  const { role, refreshProfile, user, premiumExpiresAt } = useAuth();
+  const { role, refreshProfile, user, premiumExpiresAt, signOut, updatePassword } = useAuth();
   const location = useLocation();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [pwMsg, setPwMsg] = useState(null);
+  const [pwBusy, setPwBusy] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [upgradePlan, setUpgradePlan] = useState('monthly');
   const [upgradeBusy, setUpgradeBusy] = useState(false);
@@ -1605,11 +1609,12 @@ export default function Chat() {
         flexDirection: 'column',
         minWidth: 0,
         overflow: 'hidden',
+        position: 'relative',
       }}>
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '14px 24px', background: A.surface, borderBottom: `1px solid ${A.border}`,
-          minWidth: 0,
+          minWidth: 0, position: 'relative', zIndex: 31,
         }}>
           <div style={{ fontWeight: 700, fontSize: viewportWidth < 640 ? 13 : 15, color: A.brand }}>
             {BRAND.name}
@@ -1642,6 +1647,17 @@ export default function Chat() {
               ← Back to Home
             </Link>
             <button
+              onClick={() => { setSettingsOpen(!settingsOpen); }}
+              style={{
+                background: settingsOpen ? A.activeItemBg : 'none',
+                border: 'none', color: A.primary, fontSize: 19, cursor: 'pointer',
+                padding: '2px 4px', lineHeight: 1, borderRadius: 6,
+              }}
+              title={settingsOpen ? 'Close settings' : 'Settings'}
+            >
+              ⚙️
+            </button>
+            <button
               onClick={toggleTheme}
               style={{
                 background: 'none',
@@ -1658,6 +1674,202 @@ export default function Chat() {
             </button>
           </div>
         </div>
+
+        {settingsOpen && (
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            background: A.bg, zIndex: 30, overflowY: 'auto',
+          }}>
+            <div style={{
+              maxWidth: 720, margin: '0 auto', padding: '28px 24px 80px',
+              display: 'flex', flexDirection: 'column', gap: 16,
+            }}>
+              <div style={{ fontSize: 20, fontWeight: 800, color: A.text }}>
+                ⚙️ Settings
+              </div>
+
+              {/* Account */}
+              <div style={{ background: A.surface, border: `1px solid ${A.border}`, borderRadius: 14, padding: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: '50%', background: A.activeItemBg, color: A.primary,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16,
+                    flexShrink: 0,
+                  }}>
+                    {(user?.email || 'U').charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: A.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {user?.email || 'Logged in'}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: A.muted, marginTop: 1 }}>
+                      {role === 'admin' ? '👑 Admin account' : role === 'premium' ? '★ Premium member' : 'Free account'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+                  background: A.bg, border: `1px solid ${A.border}`, borderRadius: 10, padding: 10,
+                }}>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="New password (min 8 chars)"
+                    style={{
+                      flex: 1, minWidth: 180, padding: '9px 11px', borderRadius: 8, border: `1px solid ${A.border}`,
+                      background: A.surface, color: A.text, fontSize: 13, outline: 'none', fontFamily: 'inherit',
+                    }}
+                  />
+                  <button
+                    onClick={async () => {
+                      if (newPassword.length < 8) { setPwMsg({ ok: false, text: 'Password must be at least 8 characters.' }); return; }
+                      setPwBusy(true); setPwMsg(null);
+                      try {
+                        const { error } = await updatePassword(newPassword);
+                        if (error) throw error;
+                        setNewPassword('');
+                        setPwMsg({ ok: true, text: 'Password updated successfully.' });
+                      } catch (e) {
+                        setPwMsg({ ok: false, text: e.message || 'Failed to update password.' });
+                      } finally { setPwBusy(false); }
+                    }}
+                    disabled={pwBusy}
+                    style={{
+                      background: A.primary, color: '#fff', border: 'none', borderRadius: 8,
+                      padding: '9px 14px', fontSize: 13, fontWeight: 700, cursor: pwBusy ? 'default' : 'pointer',
+                      opacity: pwBusy ? 0.6 : 1,
+                    }}
+                  >
+                    {pwBusy ? 'Updating…' : 'Change Password'}
+                  </button>
+                </div>
+                {pwMsg && (
+                  <div style={{
+                    marginTop: 10, fontSize: 12.5, padding: '9px 12px', borderRadius: 8,
+                    color: pwMsg.ok ? A.success : A.warning,
+                    background: pwMsg.ok ? A.successBg : A.warningBg,
+                    border: `1px solid ${pwMsg.ok ? A.success : A.warningBorder}`,
+                  }}>
+                    {pwMsg.text}
+                  </div>
+                )}
+              </div>
+
+              {/* Premium & Billing */}
+              <div style={{ background: A.surface, border: `1px solid ${A.border}`, borderRadius: 14, padding: 18 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: A.text, marginBottom: 6 }}>
+                  💳 Premium & Billing
+                </div>
+                <div style={{ fontSize: 12, color: A.muted, marginBottom: 14 }}>
+                  Aapka Premium plan aur payments yahan manage hota hai.
+                </div>
+                {role === 'premium' ? (
+                  <>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 10, background: A.successBg,
+                      border: `1px solid ${A.success}`, borderRadius: 10, padding: '11px 13px', marginBottom: 14,
+                    }}>
+                      <span style={{ fontSize: 18 }}>✅</span>
+                      <div style={{ fontSize: 13, color: A.text }}>
+                        <b>Premium Active</b>
+                        {premiumExpiresAt && (
+                          <span style={{ display: 'block', fontSize: 12, color: A.muted }}>
+                            Plan active till {new Date(premiumExpiresAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.6, marginBottom: 14 }}>
+                      <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — purchase ke 7 din andar full refund.</div>
+                      <div>• 7 din ke baad no refund, aur na hi bacha hua time transfer hoga.</div>
+                      <div>• Approval ke baad 5–7 working days me paisa account me wapas.</div>
+                    </div>
+                    <a
+                      href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund.\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
+                      style={{
+                        display: 'block', textAlign: 'center', background: A.warning, color: '#fff', borderRadius: 10,
+                        padding: '12px', fontSize: 14, fontWeight: 700, textDecoration: 'none',
+                      }}
+                    >
+                      ↺ Request Refund
+                    </a>
+                  </>
+                ) : role === 'admin' ? (
+                  <div style={{ fontSize: 13, color: A.muted }}>
+                    Admin account — billing nahi hoti. Users/subscriptions ke liye <b style={{ color: A.primary }}>Dashboard</b> open karo.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ fontSize: 13, color: A.muted }}>
+                      Unlock <b style={{ color: A.text }}>unlimited answers</b> with Premium — ₹499/month se shuru.
+                    </div>
+                    <button
+                      onClick={() => { setUpgradePlan('monthly'); setUpgradeError(''); setShowUpgrade(true); }}
+                      style={{
+                        background: A.primary, color: '#fff', border: 'none', borderRadius: 10,
+                        padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >
+                      ⭐ Upgrade to Premium
+                    </button>
+                    <div style={{ fontSize: 11, color: A.muted, textAlign: 'center' }}>
+                      7-day money-back guarantee · Secure payments via Cashfree
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Appearance */}
+              <div style={{ background: A.surface, border: `1px solid ${A.border}`, borderRadius: 14, padding: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: A.text }}>🎨 Appearance</div>
+                  <div style={{ fontSize: 12, color: A.muted, marginTop: 3 }}>Light aur dark theme ke beech switch karo.</div>
+                </div>
+                <button
+                  onClick={toggleTheme}
+                  style={{
+                    background: A.activeItemBg, color: A.primary, border: `1px solid ${A.border}`,
+                    borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  }}
+                >
+                  {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+                </button>
+              </div>
+
+              {/* Help & Support */}
+              <div style={{ background: A.surface, border: `1px solid ${A.border}`, borderRadius: 14, padding: 18 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: A.text, marginBottom: 8 }}>💬 Help & Support</div>
+                <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.7, marginBottom: 12 }}>
+                  Koi sawaal, issue, quota problem ya refund chahiye — system administrator se seedha email karo.
+                </div>
+                <a
+                  href="mailto:adityanaik12d@gmail.com?subject=Support%20—%20AI%20Knowledge%20Assistant"
+                  style={{
+                    display: 'block', textAlign: 'center', color: A.primary, border: `1px solid ${A.primary}`,
+                    borderRadius: 10, padding: '11px', fontSize: 13.5, fontWeight: 700, textDecoration: 'none',
+                  }}
+                >
+                  ✉️ adityanaik12d@gmail.com
+                </a>
+              </div>
+
+              {/* Sign out */}
+              <button
+                onClick={async () => {
+                  await signOut();
+                  window.location.href = '/';
+                }}
+                style={{
+                  background: A.warning, color: '#fff', border: 'none', borderRadius: 10,
+                  padding: '13px', fontSize: 14, fontWeight: 800, cursor: 'pointer',
+                }}
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        )}
 
         <div
           ref={messagesContainerRef}
