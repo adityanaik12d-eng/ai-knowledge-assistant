@@ -214,6 +214,9 @@ export default function Chat() {
 
   const A = theme === 'dark' ? DARK_COLORS : COLORS;
 
+  const gmailLink = (subject, body) =>
+    `https://mail.google.com/mail/?view=cm&fs=1&to=adityanaik12d@gmail.com&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
   useEffect(() => {
     if (location.state?.openUpgrade) {
       setUpgradePlan('monthly');
@@ -1794,7 +1797,7 @@ export default function Chat() {
                       <div>• Refunds are credited to the original payment method within 5–7 working days after approval (UPI usually within 5 days, cards up to 7 days).</div>
                     </div>
                     <a
-                      href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund of my Premium plan amount (convenience fee excluded).\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
+                      href={gmailLink('Refund Request — AI Knowledge Assistant', `Hi, I\'d like to request a refund of my Premium plan amount (convenience fee excluded).\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}
                       style={{
                         display: 'block', textAlign: 'center', background: A.warning, color: '#fff', borderRadius: 10,
                         padding: '12px', fontSize: 14, fontWeight: 700, textDecoration: 'none',
@@ -1852,7 +1855,7 @@ export default function Chat() {
                   Have a question, facing an issue, or need a refund? Reach out to the system administrator directly.
                 </div>
                 <a
-                  href="mailto:adityanaik12d@gmail.com?subject=Support%20—%20AI%20Knowledge%20Assistant"
+                  href={gmailLink('Support — AI Knowledge Assistant', '')}
                   style={{
                     display: 'block', textAlign: 'center', color: A.primary, border: `1px solid ${A.primary}`,
                     borderRadius: 10, padding: '11px', fontSize: 13.5, fontWeight: 700, textDecoration: 'none',
@@ -2377,7 +2380,7 @@ export default function Chat() {
                     <div>• Refunds are credited to the original payment method within 5–7 working days after approval (UPI usually within 5 days, cards up to 7 days).</div>
                   </div>
                   <a
-                    href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund of my Premium plan amount (convenience fee excluded).\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
+                    href={gmailLink('Refund Request — AI Knowledge Assistant', `Hi, I\'d like to request a refund of my Premium plan amount (convenience fee excluded).\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}
                     style={{
                       textAlign: 'center', background: A.warning, color: '#fff', borderRadius: 10,
                       padding: '12px', fontSize: 14, fontWeight: 700, textDecoration: 'none',
@@ -2386,7 +2389,7 @@ export default function Chat() {
                     ↺ Request Refund
                   </a>
                   <div style={{ fontSize: 11, color: A.muted, textAlign: 'center' }}>
-                    A pre-filled refund request email will be generated — just hit send.
+                    Gmail kholega with a pre-filled refund message — just hit send.
                   </div>
                 </div>
               </div>
