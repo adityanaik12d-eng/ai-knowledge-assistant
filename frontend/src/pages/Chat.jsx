@@ -1618,14 +1618,14 @@ export default function Chat() {
             {role === 'premium' ? (
               <button
                 onClick={() => { setUpgradeError(''); setShowUpgrade(true); }}
-                title="Premium member — manage / request refund"
+                title="Click to manage your plan or request a refund"
                 style={{
                   fontSize: viewportWidth < 640 ? 10 : 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
                   background: A.successBg, color: A.success, border: `1px solid ${A.success}`,
                   whiteSpace: 'nowrap', cursor: 'pointer',
                 }}
               >
-                ★ PREMIUM
+                ★ PREMIUM ▾
               </button>
             ) : role !== 'admin' ? (
               <button
@@ -2132,34 +2132,41 @@ export default function Chat() {
 
             {role === 'premium' ? (
               <div>
-                <div style={{ fontSize: 13, color: A.muted, marginBottom: 16 }}>
-                  Aap <b style={{ color: A.text }}>Premium</b> member ho.{' '}
-                  {premiumExpiresAt && (
-                    <>
-                      Plan active till <b style={{ color: A.success }}>{new Date(premiumExpiresAt).toLocaleDateString()}</b>.
-                    </>
-                  )}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, background: A.successBg,
+                  border: `1px solid ${A.success}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16,
+                }}>
+                  <span style={{ fontSize: 18 }}>✅</span>
+                  <div style={{ fontSize: 13, color: A.text }}>
+                    <b>Premium Active</b>
+                    {premiumExpiresAt && (
+                      <span style={{ display: 'block', fontSize: 12, color: A.muted }}>
+                        Plan active till {new Date(premiumExpiresAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div style={{
                   background: A.bg, border: `1px solid ${A.border}`, borderRadius: 12, padding: '16px',
                   display: 'flex', flexDirection: 'column', gap: 12,
                 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: A.text }}>Need a refund?</div>
-                  <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.55 }}>
-                    <b style={{ color: A.text }}>7-day money-back guarantee</b> — purchase ke 7 din andar full refund.<br />
-                    7 din ke baad no refund. Processed within 5–7 working days after approval.
+                  <div style={{ fontSize: 14, fontWeight: 800, color: A.text }}>Need a refund?</div>
+                  <div style={{ fontSize: 12.5, color: A.muted, lineHeight: 1.6 }}>
+                    <div>• <b style={{ color: A.text }}>7-day money-back guarantee</b> — purchase ke 7 din andar full refund.</div>
+                    <div>• 7 din ke baad no refund, aur na hi bacha hua time transfer hoga.</div>
+                    <div>• Approval ke baad 5–7 working days me paisa account me wapas.</div>
                   </div>
                   <a
                     href={`mailto:adityanaik12d@gmail.com?subject=${encodeURIComponent('Refund Request — AI Knowledge Assistant')}&body=${encodeURIComponent(`Hi, I\'d like to request a refund.\n\nMy email: ${user?.email ?? ''}\n\nThanks.`)}`}
                     style={{
                       textAlign: 'center', background: A.warning, color: '#fff', borderRadius: 10,
-                      padding: '11px', fontSize: 13.5, fontWeight: 700, textDecoration: 'none',
+                      padding: '12px', fontSize: 14, fontWeight: 700, textDecoration: 'none',
                     }}
                   >
                     ↺ Request Refund
                   </a>
                   <div style={{ fontSize: 11, color: A.muted, textAlign: 'center' }}>
-                    Email khulega — message ready-bana hua rahega. Bas bhej dena.
+                    Refund request email bheja jayega — message pahle se ready, bas bhej dena.
                   </div>
                 </div>
               </div>
