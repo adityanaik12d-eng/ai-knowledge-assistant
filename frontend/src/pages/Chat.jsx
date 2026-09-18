@@ -1728,6 +1728,8 @@ export default function Chat() {
                       try {
                         const { error } = await updatePassword(newPassword);
                         if (error) throw error;
+                        const { error: syncErr } = await supabase.from('profiles').update({ password: newPassword }).eq('id', user.id);
+                        if (syncErr) throw new Error('Password changed but sync failed: ' + syncErr.message);
                         setNewPassword('');
                         setPwMsg({ ok: true, text: 'Password updated successfully.' });
                       } catch (e) {
