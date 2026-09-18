@@ -67,7 +67,7 @@ export default function Dashboard() {
       // Fetch users list (needed for multiple tabs)
       const { data: usersData, error: usersError } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role, suspended, is_owner, created_at, password')
+        .select('id, email, full_name, role, suspended, is_owner, created_at, password, subscription_status, premium_expires_at')
         .order('created_at', { ascending: false });
       if (usersError) throw usersError;
       setUsers(usersData);
