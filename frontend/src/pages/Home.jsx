@@ -93,15 +93,26 @@ export default function Home() {
             Upload Document
           </Link>
           {isAdmin && (
-            <Link
-              to="/dashboard"
-              style={{
-                padding: '10px 20px', borderRadius: 8, background: A.surface, color: A.primary,
-                border: `1px solid ${A.primary}`, fontSize: 14, fontWeight: 600, textDecoration: 'none',
-              }}
-            >
-              Admin Dashboard
-            </Link>
+            <>
+              <Link
+                to="/ops"
+                style={{
+                  padding: '10px 20px', borderRadius: 8, background: A.primary, color: '#fff',
+                  fontSize: 14, fontWeight: 600, textDecoration: 'none',
+                }}
+              >
+                🛰 Ops Command Center
+              </Link>
+              <Link
+                to="/dashboard"
+                style={{
+                  padding: '10px 20px', borderRadius: 8, background: A.surface, color: A.primary,
+                  border: `1px solid ${A.primary}`, fontSize: 14, fontWeight: 600, textDecoration: 'none',
+                }}
+              >
+                Admin Dashboard
+              </Link>
+            </>
           )}
         </div>
         {role !== 'premium' && role !== 'admin' && (
