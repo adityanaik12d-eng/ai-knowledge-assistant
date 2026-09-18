@@ -30,6 +30,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 class ClientError extends Error {}
+class ProviderError extends Error {}
 
 // Price anchors used for plan creation (paise).
 const PLANS: Record<string, { amount: number; period: string; interval: number; name: string; description: string }> = {
@@ -69,7 +70,10 @@ async function razorpayFetch(path: string, method = "GET", body?: unknown): Prom
   let data: any = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
   if (!res.ok) {
-    throw new ClientError(`Razorpay ${method} ${path} failed (${res.status}): ${data?.error?.description ?? text}`);
+    console.error(`Razorpay ${method} ${path} failed (${res.status}): ${data?.error?.description ?? text}`);
+    throw new ProviderError(
+      "Payment service is temporarily unavailable. Please try again in a moment."
+    );
   }
   return data;
 }
@@ -345,6 +349,8 @@ Deno.serve(async (req: Request) => {
     }
   } catch (e: any) {
     if (e instanceof ClientError) return json({ error: e.message }, 400);
-    return json({ error: e?.message ?? "Internal error" }, 500);
+    if (e instanceof ProviderError) return json({ error: e.message }, 503);
+    console.error("payment fn error:", e?.message ?? e);
+    return json({ error: "Something went wrong. Please try again." }, 500);
   }
 });
