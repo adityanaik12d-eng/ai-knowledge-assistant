@@ -45,7 +45,7 @@ export default function Ops() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No session');
       const { data: res, error: fnError } = await supabase.functions.invoke('ops', { body: {} });
-      if (fnError) throw fnError;
+      if (fnError) throw new Error(fnError.context?.error?.error ?? fnError.message ?? 'Edge function failed');
       if (!res || res.error) throw new Error(res?.error || 'Failed to load ops data');
       setData(res);
     } catch (err) {

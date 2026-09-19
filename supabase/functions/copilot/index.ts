@@ -63,29 +63,47 @@ function num(v: unknown, fallback: number, min = 0, max = 90): number {
   return Math.min(Math.max(n, min), max);
 }
 
-async function pickOp(question: string): Promise<any> {
-  const plan = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: question }] }],
-        systemInstruction: {
-          parts: [{
-            text:
-              "You map a user's question to EXACTLY ONE operation from this list, outputting ONLY compact JSON like {\"op\":\"user_list\",\"params\":{...}}. Available ops with params:\n" +
-              JSON.stringify(OPS, null, 0) +
-              "\nIf nothing fits, use usage_summary with no params. Never output anything except the JSON object.",
-          }],
-        },
-        generationConfig: { temperature: 0, maxOutputTokens: 200 },
-      }),
-      signal: AbortSignal.timeout(20000),
+async function callGemini(body: unknown): Promise<any> {
+  let last: any;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(25000),
+        }
+      );
+      if (res.ok) return await res.json();
+      if (res.status === 429 && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        last = null;
+        continue;
+      }
+      throw new Error(`Gemini request failed (${res.status})`);
+    } catch (e) {
+      last = e;
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
     }
-  );
-  if (!res.ok) throw new Error("Mapper unavailable");
-  const d = await res.json();
+  }
+  throw last ?? new Error("Gemini unavailable");
+}
+
+async function pickOp(question: string): Promise<any> {
+  const d = await callGemini({
+    contents: [{ role: "user", parts: [{ text: question }] }],
+    systemInstruction: {
+      parts: [{
+        text:
+          "You map a user's question to EXACTLY ONE operation from this list, outputting ONLY compact JSON like {\"op\":\"user_list\",\"params\":{...}}. Available ops with params:\n" +
+          JSON.stringify(OPS, null, 0) +
+          "\nIf nothing fits, use usage_summary with no params. Never output anything except the JSON object.",
+      }],
+    },
+    generationConfig: { temperature: 0, maxOutputTokens: 200 },
+  });
   const text = d?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
@@ -205,31 +223,25 @@ async function runOp(op: any): Promise<unknown> {
 
 async function summarize(question: string, op: any, result: unknown): Promise<string> {
   if (!GEMINI_API_KEY) return "No Gemini key configured.";
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: question }] }],
-        systemInstruction: {
-          parts: [{
-            text:
-              "You are the owner's Dev-Copilot for their white-label SaaS. Below is a question and the raw result of the lookup. " +
-              "Answer the question briefly in clear English/Hinglish-friendly markdown (short bullets, numbers as given). " +
-              "Do NOT invent numbers. If there is no data, say so.\n\nQUESTION: " + question +
-              "\n\nOPERATION: " + JSON.stringify(op || {}) +
-              "\n\nRESULT:\n" + JSON.stringify(result, null, 2),
-          }],
-        },
-        generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
-      }),
-      signal: AbortSignal.timeout(25000),
-    }
-  );
-  if (!res.ok) return result ? JSON.stringify(result).slice(0, 1200) : "No data.";
-  const d = await res.json();
-  return d?.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") || "No answer generated.";
+  try {
+    const d = await callGemini({
+      contents: [{ role: "user", parts: [{ text: question }] }],
+      systemInstruction: {
+        parts: [{
+          text:
+            "You are the owner's Dev-Copilot for their white-label SaaS. Below is a question and the raw result of the lookup. " +
+            "Answer the question briefly in clear English/Hinglish-friendly markdown (short bullets, numbers as given). " +
+            "Do NOT invent numbers. If there is no data, say so.\n\nQUESTION: " + question +
+            "\n\nOPERATION: " + JSON.stringify(op || {}) +
+            "\n\nRESULT:\n" + JSON.stringify(result, null, 2),
+        }],
+      },
+      generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
+    });
+    return d?.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") || "No answer generated.";
+  } catch {
+    return result ? JSON.stringify(result).slice(0, 1200) : "No data.";
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -251,7 +263,8 @@ Deno.serve(async (req: Request) => {
     const answer = await summarize(question, op, result);
     return json({ answer, op });
   } catch (e) {
-    console.error("copilot error:", (e as Error).message ?? e);
+    const msg = (e as Error).message ?? String(e);
+    console.error("copilot error:", msg);
     return json({ error: "I couldn't answer that. Try rephrasing (e.g. \"expiring subscriptions in 30 days\")." }, 500);
   }
 });

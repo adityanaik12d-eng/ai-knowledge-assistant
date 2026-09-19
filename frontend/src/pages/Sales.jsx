@@ -53,7 +53,7 @@ export default function Sales() {
     setLoading(true); setError('');
     try {
       const { data, error: fnError } = await supabase.functions.invoke('sales', { body: { action: 'list' } });
-      if (fnError) throw fnError;
+      if (fnError) throw new Error(fnError.context?.error?.error ?? fnError.message ?? 'Edge function failed');
       if (data?.error) throw new Error(data.error);
       setLeads(data.leads || []);
       setSummary(data.summary || null);

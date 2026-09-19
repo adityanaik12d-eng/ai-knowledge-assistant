@@ -58,13 +58,17 @@ export default function Copilot() {
     setError('');
     setMsgs((prev) => [...prev, { role: 'user', content: q }]);
     setBusy(true);
+    let serverMsg = null;
     try {
       const { data, error: fnError } = await supabase.functions.invoke('copilot', { body: { question: q } });
-      if (fnError) throw fnError;
+      if (fnError) {
+        serverMsg = fnError.context?.error?.error ?? fnError.context?.error?.message ?? null;
+        throw new Error(fnError.message || 'Edge function failed');
+      }
       if (data?.error) throw new Error(data.error);
       setMsgs((prev) => [...prev, { role: 'assistant', content: data.answer, op: data.op }]);
     } catch (err) {
-      setError(err.message || 'Kuch gadbad ho gayi. Dobara try karo ya alag sentence me puchho.');
+      setError(serverMsg || err.message || 'Kuch gadbad ho gayi. Dobara try karo ya alag sentence me puchho.');
     } finally {
       setBusy(false);
     }
